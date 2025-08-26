@@ -1,10 +1,9 @@
-# Archivo para refactorizar funciones básicas y que no interpongan con el main.py
-import re
 import os
+import re
 import logging
 import base64
 
-#from users import Users
+from app.users import Users
 from datetime import datetime
 from cryptography import x509
 from cryptography.exceptions import InvalidSignature
@@ -15,7 +14,6 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.hmac import HMAC
-
 
 
 # Revisar si el DNI es válido.

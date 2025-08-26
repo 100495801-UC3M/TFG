@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="es-es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Perfil</title>
+    <link rel="stylesheet" href="../static/css/styles.css">
+    <link rel="stylesheet" href="../static/css/interface.css">
+    <script src="../static/js/scripts.js"></script>
+</head>
+<body>
+    <form method="POST">
+        <button type="submit" name="delete_account" id="delete">
+            <p>Eliminar Cuenta</p>
+            <img src="/static/images/bin.png" alt="Eliminar">
+        </button>
+    </form>
+    <br><br><br>
+    <form method="POST">
+        <div>
+            <label for="password">Contraseña Actual:</label>
+            <input type="password" id="password" name="password" required>
+        </div>
+        <div>
+            <label for="new_password">Contraseña Nueva:</label>
+            <input type="password" id="new_password" name="new_password" required>
+        </div>
+        <div>
+            <label for="new_password2">Confirme la nueva contraseña:</label>
+            <input type="password" id="new_password2" name="new_password2" required>
+        </div>
+        {% if error %}
+            <p style="color:red;">{{ error }}</p>
+        {% endif %}
+        {% if success %}
+            <p style="color:rgb(14, 170, 0);">{{ success }}</p>
+        {% endif %}
+        <button type="submit" name="change_password">Cambiar contraseña</button>
+        <br><br><br>
+    </form>
+    <button onclick="redirect('/home')">Volver a los mensajes</button>
+</body>

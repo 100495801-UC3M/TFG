@@ -1,0 +1,52 @@
+# Configuración general
+HOME            = .
+RANDFILE        = $ENV::HOME/.rnd
+
+# Sección CA para gestionar certificados
+[ ca ]
+default_ca = CA_default
+
+[ CA_default ]
+dir             = .                     # Directorio base
+new_certs_dir   = $dir/nuevoscerts      # Directorio donde se guardan los certificados nuevos
+crl_dir         = $dir/crls             # Directorio para las listas de revocación
+database        = $dir/index.txt        # Base de datos de certificados emitidos
+serial          = $dir/serial           # Número de serie
+private_key     = $dir/privado/ca1key.pem # Clave privada de la CA
+certificate     = $dir/ac1cert.pem      # Certificado de la CA
+default_days    = 365                   # Validez de los certificados
+default_md      = sha256                # Algoritmo de hash
+policy          = policy_anything       # Política de emisión
+
+# Política de emisión
+[ policy_anything ]
+countryName            = optional
+stateOrProvinceName    = optional
+localityName           = optional
+organizationName       = optional
+organizationalUnitName = optional
+commonName             = supplied
+emailAddress           = optional
+
+# Sección para crear solicitudes de certificado (CSR)
+[ req ]
+default_bits        = 2048
+default_md          = sha256
+distinguished_name  = req_distinguished_name
+x509_extensions     = v3_req
+
+# Sección de nombres distinguidos para la solicitud de certificados
+[ req_distinguished_name ]
+commonName          = Common Name (e.g., your name)
+
+# Sección para especificar extensiones para un certificado (sin ser CA)
+[ usr_cert ]
+basicConstraints    = CA:FALSE
+keyUsage            = digitalSignature, keyEncipherment
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid,issuer
+
+# Extensiones adicionales para la solicitud de certificados
+[ v3_req ]
+basicConstraints = CA:FALSE
+keyUsage = digitalSignature, keyEncipherment

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lista de Usuarios</title>
+    <link rel="stylesheet" href="../static/css/styles.css">
+    <link rel="stylesheet" href="../static/css/interface.css">
+    <script src="../static/js/scripts.js"></script>
+</head>
+<body>
+    <button type="button" onclick="redirect('/home')">Menú Principal</button>
+    <br><br><br>
+    <h1>Lista de Usuarios Registrados</h1>
+    <ul>
+        {% for user in users %}
+            <div class="user">
+                <div class="left">
+                    <li>Usuario: {{ user["username"] }} -
+                        Email: {{user["email"]}} -
+                        Contraseña: {{user["password"]}} - Rol: {{ user["role"] }}
+                    </li>
+                </div>
+                <div class="rigth">
+                    {%  if user["role"] != "admin" %}
+                        <form method="POST">
+                            <input type="hidden" name="username" value="{{ user["username"] }}">
+                            <button type="submit" name="delete" id="delete">
+                                <img src="/static/images/bin.png" alt="Eliminar">
+                            </button>
+                            <button type="submit" name="promote" id="promote">
+                                Hacer admin
+                            </button>
+                        </form>
+                    {% endif %}
+                </div>
+            </div>
+            <hr>
+        {% endfor %}
+    </ul>
+</body>
+</html>

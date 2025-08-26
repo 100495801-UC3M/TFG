@@ -3,10 +3,9 @@ import re
 import base64
 import logging
 from datetime import timedelta
-import functions
-#import app.security as security
-#from app.users import Users
-#from app.messages import Messages
+import app.security as security
+from app.users import Users
+from app.messages import Messages
 from flask import Flask, render_template, request, redirect, url_for, session, abort
 
 
@@ -21,7 +20,7 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=5)
 
 # Inicializamos las bases de datos
 users_db = Users()
-account_db = Accounts()
+messages_db = Messages()
 
 # Configuración logging para que se muestre en la consola
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -33,7 +32,6 @@ def index():
     # Ruta de la página de inicio de la web
     return render_template("index.html")
 
-
 route = re.sub(r"^(\/).*", r"\1register", route)
 @app.route(route, methods=["GET", "POST"])
 def register():
@@ -43,19 +41,21 @@ def register():
 
     # Al recibir el cuestionario
     if request.method == "POST":
-        username = request.form["username"].strip().lower()
-        DNI = request.form["DNI"].strip().upper()
+        DNI = request.form["username"].strip().lower()
+        name = request.form["username"].strip().upper()
+        first_surname = request.form["username"].strip().upper()
+        second_surname = request.form["username"].strip().upper()
         email = request.form["email"].strip().lower()
         password = request.form["password"]
         password2 = request.form["password2"]
 
-        #Comprueba que el DNI es válido
-        valid = functions.DNI_valid(DNI)
-        if valid[0] == False:
-            return render_template("register.html", error=valid[1])
-            
+        # Comprueba que el DNI es válido
+        error = security.DNI_valid(DNI)
+        if error[0] == False:
+            return render_template("register.html", error=error[1])
+
         # Comprueba que la contraseña es segura
-        if not functions.check_password(password):
+        if not security.check_password(password):
             error = ("La contraseña es inválida. Debe tener al menos 6 "
                      "caracteres, una mayúscula, una minúscula, un número y "
                      "un carácter especial ($!%*?&_¿@#=-). No puede incluir "
@@ -74,19 +74,19 @@ def register():
         private_key, public_key = security.generate_keys()
 
         # Se crea un request de certificado, donde posteriormente se almacenará la clave pública
-        security.create_request(username, public_key, private_key)
+        security.create_request(DNI, public_key, private_key)
 
         # La clave privada es encriptada con la contraseña y el salt
         private_key = security.encrypt_private_key(private_key, password, salt)
 
         # Guarda en la base de datos los datos del registro
-        result = users_db.add_user(username, email, hashed_password, base64.urlsafe_b64encode(salt), private_key)
+        result = users_db.add_user(DNI, name, first_surname, second_surname, email, hashed_password, base64.urlsafe_b64encode(salt), private_key)
 
         if result:
-            logging.info(f"Usuario {username} registrado exitosamente.")
+            logging.info(f"Usuario {name} {first_surname} {second_surname} registrado exitosamente.")
             return redirect(url_for("login"))
         else:
-            logging.error(f"Error en el registro de {username}. El usuario o el email ya están registrados.")
+            logging.error(f"Error en el registro de {name} {first_surname} {second_surname}. El DNI o el email ya están registrados.")
             error = "Usuario o email ya registrados"
             return render_template("register.html", error=error)
     

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="es-es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bienvenid@</title>
+    <link rel="stylesheet" href="../static/css/styles.css">
+    <link rel="stylesheet" href="../static/css/interface.css">
+    <script src="../static/js/scripts.js"></script>
+</head>
+<body>
+    <div class="top">
+        <!-- Si eres admin mosrtrar botón para ver la lista de usuarios -->
+        {% if role == "admin" %}
+            <button type="button" onclick="redirect('/users')">Usuarios</button>
+            <button type="button" onclick="redirect('/messages')">Mensajes</button>
+        {% endif %}
+
+        <button type="button" onclick="redirect('/profile')">Perfil</button>
+
+        <form action="/logout" method="POST">
+            <button type="submit" id="logout">Cerrar sesión</button>
+        </form>
+
+        <div class="search">
+            <form method="POST">
+                <input type="text" id="user_searched" name="user_searched" required>
+                <button type="submit" name="search_form">Buscar</button>
+            </form>
+    
+            <!-- Mensaje de error si hay -->
+            {% if error %}
+                <p style="color:red;">{{ error }}</p>
+            {% endif %}
+        </div>
+    </div>
+    <br><hr>
+    <div class="bottom">
+        <div class="list">
+            <h3>Chats:</h3>
+            {% for message in list_conversations %}
+                {% if username != message[0] %}
+                    <div>
+                        <form method="POST" class="person">
+                            <input type="hidden" id="user_searched" name="user_searched" value="{{ message[0] }}">
+                            <button type="submit" name="search_form">
+                                <p class="nombre">
+                                    {{ message[0] }}
+                                </p>
+                                <p style="overflow: hidden; text-align: left;">
+                                    {{ message[1] }}
+                                </p>
+                            </button>
+                        </form>
+                    </div>
+                {% else %}
+                    <div>
+                        <form method="POST" class="person">
+                            <input type="hidden" id="user_searched" name="user_searched" value="{{ message[0] }}">
+                            <button type="submit" name="search_form">
+                                <p class="nombre">
+                                    Yo ({{ message[0] }})
+                                </p>
+                                <p style="overflow: hidden; text-align: left;">
+                                    {{ message[1] }}
+                                </p>
+                            </button>
+                        </form>
+                    </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+        <div class="messages">
+            <!-- Mostrar mensajes y opción de enviar si se ha encontrado al usuario -->
+            {% if found %}
+                <h4>Conversación con: {{ user_searched }}</h4>
+                {% for message in conversations %}
+                    {% if username == message[1] %}
+                        <div class="message_container" id="sender">
+                            <p class="message">{{ message[2] }} - {{ message[3] }}</p>
+                        </div>
+                    {% else %}
+                        <div class="message_container" id="receiver">
+                            <p class="message">{{ message[2] }} - {{ message[3] }}</p>
+                        </div>
+                    {% endif %}
+                {% endfor %}
+                <form method="POST" class="send">
+                    <input type="text" id="message" name="message" required autofocus>
+                    <button type="submit" name="send_message">Enviar</button>
+                </form>
+            {% else %}
+                <p>No hay mensajes disponibles. Busca un usuario.</p>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>
