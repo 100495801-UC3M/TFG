@@ -2,6 +2,9 @@ import os
 import re
 import logging
 import base64
+import smtplib # libreria para enviar correos
+from email.mime.text import MIMEText # para enviar correos
+import secrets # para crear un token para enviar correos
 
 from app.users import Users
 from datetime import datetime
@@ -392,3 +395,38 @@ def verify_message(encryped_message, hmac, signature, public_key):
     except Exception as e:
         logging.error(f"Error inesperado durante la verificación: {str(e)}")
         return False
+
+def gen_token():
+    return secrets.token_urlsafe(32)
+
+
+# Tipos de message: Verificación de correo, recuperar contraseña
+def send_email(email, message, token=None):
+    # Configuración SMTP (usa Mailtrap para testing; cambia para producción)
+    port = 587 # TODO Puerto para TLS, que es el que utiliza Gmail.
+    smtp_server = "live.smtp.mailtrap.io" #TODO cambiar a "smtp.gmail.com"
+    sender_email = "mailtrap@ejemplo.com"  # TODO cambiar por el correo real de app (x@gmail.com)
+    login = "api"  # TODO cambiar al nombre de usuario real del servidor SMTP
+    password = "1a2b3c4d5e6f7g"  # TODO cambiar por la contraseña real de sender_email. Usar "contraseña de aplicación" en lugar de la contraseña principal
+
+
+    verification_link = f"https://tuapp.com/verify?token={token}"  # TODO Reemplaza con tu URL real
+    full_message = f"{message} {verification_link}"
+
+    # Crear el objeto MIMEText con el contenido personalizado
+    msg = MIMEText(full_message, "plain")
+    msg["Subject"] = "Confirmación de verificación"  # Asunto personalizado
+    msg["From"] = sender_email
+    msg["To"] = email
+
+    try:
+        # Enviar el email
+        with smtplib.SMTP(smtp_server, port) as server:
+            server.starttls()  # Asegurar la conexión
+            server.login(login, password)
+            server.sendmail(sender_email, email, msg.as_string())
+        logging.info(f"Correo enviado exitosamente a {email}")
+        return "Se ha mandado un correo a la cuenta de gmail"
+    except Exception as e:
+        logging.error(f"Error al enviar correo: {str(e)}")
+        return f"Error al enviar el correo {email}: {str(e)}"

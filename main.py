@@ -41,7 +41,7 @@ def register():
 
     # Al recibir el cuestionario
     if request.method == "POST":
-        DNI = request.form["username"].strip().lower()
+        DNI = request.form["DNI"].strip().upper()
         name = request.form["username"].strip().upper()
         first_surname = request.form["username"].strip().upper()
         second_surname = request.form["username"].strip().upper()
