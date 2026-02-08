@@ -2,9 +2,8 @@ import os
 import re
 import logging
 import base64
-import smtplib # libreria para enviar correos
-from email.mime.text import MIMEText # para enviar correos
-import secrets # para crear un token para enviar correos
+import requests # para enviar correos
+import time # para enviar correos
 
 from app.users import Users
 from datetime import datetime
@@ -396,37 +395,106 @@ def verify_message(encryped_message, hmac, signature, public_key):
         logging.error(f"Error inesperado durante la verificación: {str(e)}")
         return False
 
-def gen_token():
-    return secrets.token_urlsafe(32)
 
+def send_email_gmail_api(from_email: str, to_email: str, subject: str, body: str, access_token: str = None,
+                         token_data: dict = None):
+    """Enviar correo usando Gmail API.
 
-# Tipos de message: Verificación de correo, recuperar contraseña
-def send_email(email, message, token=None):
-    # Configuración SMTP (usa Mailtrap para testing; cambia para producción)
-    port = 587 # TODO Puerto para TLS, que es el que utiliza Gmail.
-    smtp_server = "live.smtp.mailtrap.io" #TODO cambiar a "smtp.gmail.com"
-    sender_email = "mailtrap@ejemplo.com"  # TODO cambiar por el correo real de app (x@gmail.com)
-    login = "api"  # TODO cambiar al nombre de usuario real del servidor SMTP
-    password = "1a2b3c4d5e6f7g"  # TODO cambiar por la contraseña real de sender_email. Usar "contraseña de aplicación" en lugar de la contraseña principal
+    Parámetros opcionales para refrescar el access token:
+    - `token_data`: diccionario con keys `access_token` y `expires_at` (epoch).
+      Si se pasa, se comprobará `expires_at` antes de usar el token.
+    """
+    access_token = access_token.strip().strip('"') if access_token else None
+    from_email = from_email.strip().strip('"')
+    to_email = to_email.strip().strip('"')
 
+    # 1. Construir el mensaje en texto plano (RFC 2822) sin indentación y con CRLF
+    message_lines = [
+        f"From: {from_email}",
+        f"To: {to_email}",
+        f"Subject: {subject}",
+        "",
+        body
+    ]
+    message_text = "\r\n".join(message_lines)
 
-    verification_link = f"https://tuapp.com/verify?token={token}"  # TODO Reemplaza con tu URL real
-    full_message = f"{message} {verification_link}"
+    # 2. Convertir a base64 URL-safe
+    message_bytes = message_text.encode("utf-8")
+    message_base64 = base64.urlsafe_b64encode(message_bytes).decode("utf-8")
 
-    # Crear el objeto MIMEText con el contenido personalizado
-    msg = MIMEText(full_message, "plain")
-    msg["Subject"] = "Confirmación de verificación"  # Asunto personalizado
-    msg["From"] = sender_email
-    msg["To"] = email
+    # 3. Construir payload
+    payload = {"raw": message_base64}
 
-    try:
-        # Enviar el email
-        with smtplib.SMTP(smtp_server, port) as server:
-            server.starttls()  # Asegurar la conexión
-            server.login(login, password)
-            server.sendmail(sender_email, email, msg.as_string())
-        logging.info(f"Correo enviado exitosamente a {email}")
-        return "Se ha mandado un correo a la cuenta de gmail"
-    except Exception as e:
-        logging.error(f"Error al enviar correo: {str(e)}")
-        return f"Error al enviar el correo {email}: {str(e)}"
+    # Si nos han pasado token_data, comprobar expiración y refrescar si procede
+    if token_data and isinstance(token_data, dict):
+        expires_at = token_data.get("expires_at")
+        if expires_at and time.time() >= expires_at:
+            new_token = refresh_access_token()
+            token_data.update(new_token)
+            access_token = token_data.get("access_token")
+
+    # Preparar headers con el access token actual
+    if not access_token and token_data:
+        access_token = token_data.get("access_token")
+
+    headers = {
+        "Authorization": f"Bearer {access_token}" if access_token else "",
+        "Content-Type": "application/json"
+    }
+
+    # 5. Enviar request y reintentar una vez si recibimos 401 (token expirado)
+    response = requests.post(
+        "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+        headers=headers,
+        json=payload
+    )
+
+    if response.status_code == 401:
+        # Refrescar si da error
+        new_token = refresh_access_token()
+        access_token = new_token.get("access_token")
+        if token_data is not None:
+            token_data.update(new_token)
+
+        headers["Authorization"] = f"Bearer {access_token}"
+        # Reintentar
+        response = requests.post(
+            "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+            headers=headers,
+            json=payload
+        )
+
+    return response.status_code, response.text
+
+def refresh_access_token():
+    import json
+    import time
+    import requests
+
+    # client_id y client_secret → client_secret.json
+    with open("./config/client_secret.json") as f:
+        config = json.load(f)["web"]
+
+    # refresh_token → token_store.json
+    with open("./config/token_store.json") as f:
+        token_store = json.load(f)
+
+    url = "https://oauth2.googleapis.com/token"
+
+    data = {
+        "client_id": config["client_id"],
+        "client_secret": config["client_secret"],
+        "refresh_token": token_store["refresh_token"],
+        "grant_type": "refresh_token"
+    }
+
+    response = requests.post(url, data=data)
+    print(response.text)
+    response.raise_for_status()
+
+    token_data = response.json()
+
+    return {
+        "access_token": token_data["access_token"],
+        "expires_at": time.time() + token_data["expires_in"]
+    }

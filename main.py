@@ -407,6 +407,16 @@ def logout():
         session.clear()
         return redirect(url_for("index"))
 
+route = re.sub(r"^(\/).*", r"\1/oauth2callback", route)
+@app.route("/oauth2callback", methods=["GET", "POST"])
+def oauth2callback():
+    # Cerrado de sesión
+    if request.method == "GET":
+        abort(404)
+    else:
+        session.clear()
+        return redirect(url_for("index"))
+
 
 if __name__ == "__main__":
     # Para muestra en la defensa se ha creado un certificado autofirmado para que la web aparezca como insegura
