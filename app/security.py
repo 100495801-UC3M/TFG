@@ -4,6 +4,7 @@ import logging
 import base64
 import requests # para enviar correos
 import time # para enviar correos
+import json # para enviar correos
 
 from app.users import Users
 from datetime import datetime
@@ -396,15 +397,8 @@ def verify_message(encryped_message, hmac, signature, public_key):
         return False
 
 
-def send_email_gmail_api(from_email: str, to_email: str, subject: str, body: str, access_token: str = None,
-                         token_data: dict = None):
-    """Enviar correo usando Gmail API.
-
-    Parámetros opcionales para refrescar el access token:
-    - `token_data`: diccionario con keys `access_token` y `expires_at` (epoch).
-      Si se pasa, se comprobará `expires_at` antes de usar el token.
-    """
-    access_token = access_token.strip().strip('"') if access_token else None
+def send_email_gmail_api(from_email: str, to_email: str, subject: str, body: str):
+    """Enviar correo usando Gmail API."""
     from_email = from_email.strip().strip('"')
     to_email = to_email.strip().strip('"')
 
@@ -425,20 +419,23 @@ def send_email_gmail_api(from_email: str, to_email: str, subject: str, body: str
     # 3. Construir payload
     payload = {"raw": message_base64}
 
-    # Si nos han pasado token_data, comprobar expiración y refrescar si procede
-    if token_data and isinstance(token_data, dict):
-        expires_at = token_data.get("expires_at")
-        if expires_at and time.time() >= expires_at:
-            new_token = refresh_access_token()
-            token_data.update(new_token)
-            access_token = token_data.get("access_token")
-
-    # Preparar headers con el access token actual
-    if not access_token and token_data:
-        access_token = token_data.get("access_token")
+    # 4. Leer token_data de token_store.json
+    with open("./config/token_store.json") as f:
+        token_data = json.load(f)
+    
+    # Verificar expiración y refrescar si procede
+    expires_at = token_data.get("expires_at")
+    if expires_at and time.time() >= expires_at:
+        new_token = refresh_access_token()
+        token_data.update(new_token)
+        # Guardar el token actualizado en token_store.json
+        with open("./config/token_store.json", "w") as f:
+            json.dump(token_data, f)
+    
+    access_token = token_data.get("access_token")
 
     headers = {
-        "Authorization": f"Bearer {access_token}" if access_token else "",
+        "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json"
     }
 
@@ -452,9 +449,11 @@ def send_email_gmail_api(from_email: str, to_email: str, subject: str, body: str
     if response.status_code == 401:
         # Refrescar si da error
         new_token = refresh_access_token()
-        access_token = new_token.get("access_token")
-        if token_data is not None:
-            token_data.update(new_token)
+        token_data.update(new_token)
+        # Guardar el token actualizado en token_store.json
+        with open("./config/token_store.json", "w") as f:
+            json.dump(token_data, f)
+        access_token = token_data.get("access_token")
 
         headers["Authorization"] = f"Bearer {access_token}"
         # Reintentar
@@ -467,9 +466,6 @@ def send_email_gmail_api(from_email: str, to_email: str, subject: str, body: str
     return response.status_code, response.text
 
 def refresh_access_token():
-    import json
-    import time
-    import requests
 
     # client_id y client_secret → client_secret.json
     with open("./config/client_secret.json") as f:
