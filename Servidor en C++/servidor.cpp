@@ -1,4 +1,4 @@
-// Minimal servidor.c: accept connections, parse NUL-separated args, handle
+// servidor.c: accept connections, parse NUL-separated args, handle
 // RPC_BUILD -> print "s> SEND <num> <text>" and reply with a phrase.
 
 #include <stdio.h>
@@ -110,11 +110,11 @@ int main(int argc, char *argv[]) {
     if (bind(sfd_global, (struct sockaddr *)&addr, sizeof addr) < 0) { perror("bind"); close(sfd_global); exit(EXIT_FAILURE); }
     if (listen(sfd_global, BACKLOG) < 0) { perror("listen"); close(sfd_global); exit(EXIT_FAILURE); }
 
-    printf("s> init server 0.0.0.0:%d (minimal)\n", port);
+    printf("s> init server 0.0.0.0:%d \n", port);
     fflush(stdout);
 
     while (keep_running) {
-        int *cfd_ptr = malloc(sizeof(int));
+        int *cfd_ptr = (int*)malloc(sizeof(int));
         if (!cfd_ptr) { perror("malloc for client fd"); continue; }
 
         *cfd_ptr = accept(sfd_global, NULL, NULL);
@@ -136,6 +136,6 @@ int main(int argc, char *argv[]) {
     }
 
     if (sfd_global != -1) { close(sfd_global); sfd_global = -1; }
-    printf("s> Servidor minimal apagado.\n");
+    printf("s> Servidor apagado.\n");
     return 0;
 }
