@@ -1,6 +1,9 @@
 
 El entorno virtual en Linux que usaré es WSL. Esto es para simular que el servidor se encuentra en Linux mientras los clientes usan Windows o cualquier otro sistema operativo.
 
+Guía provista por:
+https://learn.microsoft.com/es-es/windows/wsl/install
+
 Para instalar WSL:
 Windows Powershell > wsl --install Ubuntu
 wsl.exe --set-default-version 2
