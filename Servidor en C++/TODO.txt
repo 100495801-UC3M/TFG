@@ -1,2 +1,0 @@
-Si es necesario usar RPC, dejar logger_serverd.
-Sin embargo, si no se usa RPC, eliminar logger_serverd

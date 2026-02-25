@@ -84,4 +84,4 @@ El sistema consta de varios procesos que deben ejecutarse, preferiblemente cada 
 * Terminal 1:
     ./servidor
 * Terminal 2:
-    ./python3 test.py
+    python3 ./test.py

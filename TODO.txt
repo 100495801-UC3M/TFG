@@ -1,0 +1,3 @@
+1. Eliminar del makefile todo lo que tenga "sudo"
+2. Si es necesario usar RPC, dejar logger_serverd.
+Sin embargo, si no se usa RPC, eliminar logger_serverd (que parece ser el caso)
