@@ -72,3 +72,17 @@ clean:
 	rm -rf build
 	rm -rf $(SEAL_BUILD)
 	@echo "Build artefacts removed."
+
+# ===============================
+# Ejecutar cliente de prueba
+# ===============================
+
+# ===============================
+# Compilar y ejecutar test
+# ===============================
+
+run-test:
+	@echo "Compilando test..."
+	g++ -std=c++17 test.cpp -lseal -o test
+	@echo "Ejecutando test..."
+	./test
