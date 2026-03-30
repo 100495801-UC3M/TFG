@@ -1,7 +1,7 @@
 /**
- * cpp/server/test_servidor.cpp  —  Servidor de prueba (WSL)
- * ===========================================================
- * Recibe dos ciphertexts CKKS cifrados desde Python (Windows),
+ * cpp/server/servidor_seal.cpp  —  Servidor SEAL (WSL)
+ * ======================================================
+ * Recibe dos ciphertexts CKKS cifrados desde Python,
  * aplica la operación indicada de forma COMPLETAMENTE cifrada
  * y devuelve el resultado.
  *
@@ -11,11 +11,12 @@
  *   3. Recibe  uint64_t + bytes  → ciphertext 2
  *   4. Envía   uint64_t + bytes  → resultado cifrado
  *
- * Compilar desde cpp/seal/build:
- *   cmake .. && make test_server
+ * Compilar (desde cpp/seal/):
+ *   cmake -S . -B build && cmake --build build -j
+ *   Ejecutable: build/servidor_seal
  *
  * Ejecutar desde WSL:
- *   ./test_server
+ *   ./build/servidor_seal
  */
 
 #include <iostream>
@@ -118,7 +119,7 @@ int main()
     bind  (server_fd, reinterpret_cast<sockaddr *>(&addr), sizeof(addr));
     listen(server_fd, 1);
 
-    cout << "[servidor] Esperando en puerto " << PORT << "..." << endl;
+    cout << "[servidor_seal] Esperando en puerto " << PORT << "..." << endl;
 
     socklen_t addrlen = sizeof(addr);
 
@@ -127,45 +128,44 @@ int main()
         int client = accept(server_fd,
                             reinterpret_cast<sockaddr *>(&addr),
                             &addrlen);
-        cout << "[servidor] Cliente conectado" << endl;
+        cout << "[servidor_seal] Cliente conectado" << endl;
 
         try {
-            // ── 1. Recibir comando ──
+            // 1. Recibir comando
             string cmd = recv_string(client);
-            cout << "[servidor] Comando: \"" << cmd << "\"" << endl;
+            cout << "[servidor_seal] Comando: \"" << cmd << "\"" << endl;
 
-            // ── 2. Recibir ciphertexts (el servidor nunca ve los datos en claro) ──
-            cout << "[servidor] Recibiendo ct1..." << endl;
+            // 2. Recibir ciphertexts (el servidor nunca ve los datos en claro)
+            cout << "[servidor_seal] Recibiendo ct1..." << endl;
             Ciphertext ct1 = recv_cipher(client, context);
 
-            cout << "[servidor] Recibiendo ct2..." << endl;
+            cout << "[servidor_seal] Recibiendo ct2..." << endl;
             Ciphertext ct2 = recv_cipher(client, context);
 
-            // ── 3. Operación homomórfica ──
+            // 3. Operación homomórfica
             Ciphertext resultado;
-            evaluator.add(ct1, ct2, resultado);   // suma cifrada
+            evaluator.add(ct1, ct2, resultado);
 
             if (cmd == "media") {
-                // Dividir entre 2 multiplicando por 0.5 (sin descifrar)
                 Plaintext plain_half;
                 encoder.encode(0.5, scale, plain_half);
                 evaluator.multiply_plain_inplace(resultado, plain_half);
                 evaluator.rescale_to_next_inplace(resultado);
-                cout << "[servidor] Aplicado: (ct1 + ct2) * 0.5" << endl;
+                cout << "[servidor_seal] Aplicado: (ct1 + ct2) * 0.5" << endl;
             } else {
-                cout << "[servidor] Aplicado: ct1 + ct2" << endl;
+                cout << "[servidor_seal] Aplicado: ct1 + ct2" << endl;
             }
 
-            // ── 4. Enviar resultado cifrado ──
+            // 4. Enviar resultado cifrado
             send_cipher(client, resultado);
-            cout << "[servidor] Resultado enviado" << endl;
+            cout << "[servidor_seal] Resultado enviado" << endl;
 
         } catch (const exception &e) {
-            cerr << "[servidor] Error con cliente: " << e.what() << endl;
+            cerr << "[servidor_seal] Error con cliente: " << e.what() << endl;
         }
 
         close(client);
-        cout << "[servidor] Esperando nueva conexión..." << endl;
+        cout << "[servidor_seal] Esperando nueva conexión..." << endl;
     }
 
     close(server_fd);

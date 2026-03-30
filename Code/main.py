@@ -420,7 +420,7 @@ def oauth2callback():
 
 if __name__ == "__main__":
     # Para muestra en la defensa se ha creado un certificado autofirmado para que la web aparezca como insegura
-    app.run(ssl_context=("cert.pem", "key.pem"), debug=True)
+    app.run(ssl_context=("config/cert.pem", "config/key.pem"), debug=True)
 
     # Si se desea quitar:
     # app.run(debug=True)

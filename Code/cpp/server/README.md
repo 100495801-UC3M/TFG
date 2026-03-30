@@ -1,16 +1,5 @@
 
-## Estructura de Directorios (Sugerida)
-
-Se recomienda organizar los ficheros de la siguiente manera (ajusta según tu estructura real):
-
-ssdd_proyecto_100495833_100495801/
-|-- client.py                       # Cliente P2P
-|-- test.py                      # Servicio Web
-|-- servidor.cpp                      # Servidor P2P principal (también cliente RPC)
-|-- logger.x                        # Definición de la interfaz RPC para el logger
-|-- logger_server.cpp                 # Implementación de la lógica del servidor RPC
-|-- Makefile                        # Makefile para compilar los componentes en C
-|-- README.md                       # Este archivo
+## Estructura de Directorios
 
 ## 1. Compilación
 
