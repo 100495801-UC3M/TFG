@@ -2,6 +2,10 @@ import os
 import re
 import base64
 import logging
+import json
+import requests
+import time
+import uuid
 from datetime import timedelta
 import app.security as security
 from app.users import Users
@@ -21,6 +25,7 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=5)
 # Inicializamos las bases de datos
 users_db = Users()
 messages_db = Messages()
+pending_registrations = {}
 
 # Configuración logging para que se muestre en la consola
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -32,14 +37,11 @@ def index():
     # Ruta de la página de inicio de la web
     return render_template("index.html")
 
-route = re.sub(r"^(\/).*", r"\1register", route)
-@app.route(route, methods=["GET", "POST"])
+@app.route("/register", methods=["GET", "POST"])
 def register():
-    # Ruta de registro de usuario
     if "username" in session:
         return redirect(url_for("home"))
 
-    # Al recibir el cuestionario
     if request.method == "POST":
         DNI = request.form["DNI"].strip().upper()
         name = request.form["username"].strip().upper()
@@ -49,47 +51,67 @@ def register():
         password = request.form["password"]
         password2 = request.form["password2"]
 
-        # Comprueba que el DNI es válido
         error = security.DNI_valid(DNI)
         if error[0] == False:
             return render_template("register.html", error=error[1])
 
-        # Comprueba que la contraseña es segura
         if not security.check_password(password):
             error = ("La contraseña es inválida. Debe tener al menos 6 "
                      "caracteres, una mayúscula, una minúscula, un número y "
                      "un carácter especial ($!%*?&_¿@#=-). No puede incluir "
                      "espacios.")
             return render_template("register.html", error=error)
-        
-        if password != password2:
-            error = "Las contraseñas no coinciden"
-            return render_template("register.html", error=error)
 
-        # Genera un salt para la contraseña
+        if password != password2:
+            return render_template("register.html", error="Las contraseñas no coinciden")
+
+        if users_db.check_user(DNI) or users_db.check_user(email):
+            return render_template("register.html", error="Usuario o email ya registrado. ¿Desea cambiar la contraseña?")
+
         salt = security.generate_salt_aes("salt", 16)
         hashed_password = security.hash(password, salt)
-
-        # Genera la clave pública y privada
         private_key, public_key = security.generate_keys()
-
-        # Se crea un request de certificado, donde posteriormente se almacenará la clave pública
         security.create_request(DNI, public_key, private_key)
+        private_key_encrypted = security.encrypt_private_key(private_key, password, salt)
 
-        # La clave privada es encriptada con la contraseña y el salt
-        private_key = security.encrypt_private_key(private_key, password, salt)
+        # Generar token único con expiración de 5 minutos
+        token = str(uuid.uuid4())
+        pending_registrations[token] = {
+            "DNI": DNI,
+            "name": name,
+            "first_surname": first_surname,
+            "second_surname": second_surname,
+            "email": email,
+            "hashed_password": hashed_password,
+            "salt": base64.urlsafe_b64encode(salt).decode(),
+            "private_key": private_key_encrypted,
+            "expires_at": time.time() + 300  # 5 minutos
+        }
 
-        # Guarda en la base de datos los datos del registro
-        result = users_db.add_user(DNI, name, first_surname, second_surname, email, hashed_password, base64.urlsafe_b64encode(salt), private_key)
+        confirm_url = f"https://localhost:5000/confirm/{token}"
 
-        if result:
-            logging.info(f"Usuario {name} {first_surname} {second_surname} registrado exitosamente.")
-            return redirect(url_for("login"))
+        subject = "Intento de registro en AGULE"
+        body = (
+            f"Se le envía este correo para confirmar su registro en la aplicación AGULE.\n\n"
+            f"Dispone de 5 minutos para completar el registro.\n\n"
+            f"Para ello, haga clic en el siguiente enlace:\n{confirm_url}\n\n"
+            f"Si no ha solicitado este registro, ignore este correo."
+        )
+
+        status, response = security.send_email_gmail_api(
+            '"AGULE Registro" <mariohidtfg@gmail.com>',
+            email,
+            subject,
+            body
+        )
+
+        if status == 200:
+            logging.info(f"Correo de confirmación enviado a {email}.")
+            return render_template("register.html", info="Se ha enviado un correo de confirmación. Tienes 5 minutos para confirmar el registro.")
         else:
-            logging.error(f"Error en el registro de {name} {first_surname} {second_surname}. El DNI o el email ya están registrados.")
-            error = "Usuario o email ya registrados"
-            return render_template("register.html", error=error)
-    
+            logging.error(f"Error al enviar correo: {response}")
+            return render_template("register.html", error="Error al enviar el correo de confirmación.")
+
     return render_template("register.html")
 
 
@@ -407,16 +429,95 @@ def logout():
         session.clear()
         return redirect(url_for("index"))
 
-route = re.sub(r"^(\/).*", r"\1/oauth2callback", route)
-@app.route("/oauth2callback", methods=["GET", "POST"])
-def oauth2callback():
-    # Cerrado de sesión
-    if request.method == "GET":
-        abort(404)
-    else:
-        session.clear()
-        return redirect(url_for("index"))
 
+@app.route("/authorize")
+def authorize():
+    with open("./config/client_secret.json") as f:
+        config = json.load(f)["web"]
+
+    # La redirect_uri debe coincidir EXACTAMENTE con la de Google Cloud Console
+    redirect_uri = config["redirect_uris"][0]
+
+    auth_url = (
+        "https://accounts.google.com/o/oauth2/auth"
+        f"?client_id={config['client_id']}"
+        f"&redirect_uri={redirect_uri}"
+        "&response_type=code"
+        "&scope=https://www.googleapis.com/auth/gmail.send"
+        "&access_type=offline"
+        "&prompt=consent"
+    )
+    return redirect(auth_url)
+
+
+@app.route("/oauth2callback", methods=["GET"])
+def oauth2callback():
+    code = request.args.get("code")
+    error = request.args.get("error")
+
+    if error:
+        logging.error(f"OAuth error: {error}")
+        return f"Error OAuth: {error}", 400
+
+    if not code:
+        return "No se recibió código de autorización", 400
+
+    with open("./config/client_secret.json") as f:
+        config = json.load(f)["web"]
+
+    redirect_uri = config["redirect_uris"][0]
+
+    response = requests.post("https://oauth2.googleapis.com/token", data={
+        "code": code,
+        "client_id": config["client_id"],
+        "client_secret": config["client_secret"],
+        "redirect_uri": redirect_uri,
+        "grant_type": "authorization_code"
+    })
+
+    if response.status_code != 200:
+        logging.error(f"Error al obtener token: {response.text}")
+        return f"Error al obtener token: {response.text}", 400
+
+    token_data = response.json()
+    token_data["expires_at"] = time.time() + token_data.get("expires_in", 3600)
+
+    with open("./config/token_store.json", "w") as f:
+        json.dump(token_data, f, indent=2)
+
+    logging.info("Token OAuth2 guardado correctamente.")
+    return redirect(url_for("index"))
+
+@app.route("/confirm/<token>")
+def confirm_register(token):
+    data = pending_registrations.get(token)
+
+    if not data:
+        return render_template("register.html", error="Enlace inválido o ya utilizado.")
+
+    if time.time() > data["expires_at"]:
+        pending_registrations.pop(token, None)
+        return render_template("register.html", error="El enlace ha caducado. Vuelve a registrarte.")
+
+    # Guardar usuario ahora
+    result = users_db.add_user(
+        data["DNI"],
+        data["name"],
+        data["first_surname"],
+        data["second_surname"],
+        data["email"],
+        data["hashed_password"],
+        data["salt"],
+        data["private_key"]
+    )
+
+    pending_registrations.pop(token, None)
+
+    if result:
+        logging.info(f"Usuario {data['name']} registrado tras confirmación por email.")
+        return redirect(url_for("login"))
+    else:
+        return render_template("register.html", error="Usuario o email ya registrados. ¿Desea cambiar la contraseña?")
 
 if __name__ == "__main__":
     # Para muestra en la defensa se ha creado un certificado autofirmado para que la web aparezca como insegura

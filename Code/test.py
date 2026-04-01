@@ -11,7 +11,7 @@ from email.mime.text import MIMEText
 from_email='"Test de TFG" <mariohidtfg@gmail.com>'
 to_email="mariohidtfg@gmail.com"
 subject="Correo de prueba"
-body="Hola!\n Tercer test enviado."
+body="Hola!\n Cuarto test enviado (refresh token)."
 
 status, response = security.send_email_gmail_api(from_email, to_email, subject, body)
 print(status)

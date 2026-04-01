@@ -1,4 +1,5 @@
 
+# BIENVENIDO AL README DE AGULE
 El entorno virtual en Linux que se usará es WSL. Esto es sirve para simular que el servidor se encuentra en Linux mientras los clientes usan Windows o cualquier otro sistema operativo.
 
 
@@ -31,7 +32,7 @@ Esto viene bien para realizar el segundo comando del bloque anterior.
 
 python -m venv .venv_win
 .\.venv_win\Scripts\activate
-pip install -r .\requirements.txt
+.\.venv_win\Scripts\python.exe -m pip install -r .\requirements.txt
 
 ## Para salir del entorno virtual, si fuese necesario, ejecutar:
 deactivate
@@ -90,6 +91,34 @@ clean-all
 
 # EJECUCCIÓN EN WINDOWS
 
-## Dentro del entorno virtual de Windows, ejecutar:
+## Dentro del entorno virtual de Windows, ejecutar: TODO Eliminar
 
 python .\app\client.py
+
+
+## Para empezar el proyecto
+
+python .\main.py
+
+
+# OBTENCIÓN DE CLIENT_SECRET
+
+## Configuración del correo (Gmail API + OAuth2), si se ejecuta por primera vez o si el token ha expirado:
+
+1. Ir a https://console.cloud.google.com:
+   - Elegir proyecto existente (TFG)
+   - Crear credenciales OAuth 2.0 (*APIs y servicios > Credenciales > Crear credenciales > ID de cliente de OAuth*)
+     - Tipo: **Web application**
+     - Orígenes autorizados de JavaScript: `https://localhost:5000/authorize`
+     - Redirect URI autorizada: `https://localhost:5000/oauth2callback`
+   - Descargar el JSON y guardarlo en `./config/client_secret.json`
+
+2. Arrancar el servidor (python .\main.py), visitar en el navegador https://localhost:5000/authorize y
+    aceptar los permisos para generar`./config/token_store.json` automáticamente.
+
+4. A partir de aquí el token se refresca solo. No es necesario repetir este proceso
+   salvo que se revoque el acceso manualmente o se cambien las credenciales.
+
+### Archivos necesarios en ./config para que funcione bien
+- `client_secret.json` — descargado de Google Cloud Console (no subir a git)
+- `token_store.json`   — generado automáticamente tras autorizar (no subir a git)

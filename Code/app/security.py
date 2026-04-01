@@ -74,7 +74,6 @@ def verify_password(stored_password, salt, provided_password):
         iterations=100000,
         backend=default_backend()
     )
-
     try:
         # Verificar si el hash derivado coincide con el almacenado
         derived_hash = kdf.derive(provided_password.encode())
