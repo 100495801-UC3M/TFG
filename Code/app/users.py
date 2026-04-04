@@ -1,6 +1,5 @@
 import sys
 import sqlite3
-import re
 
 class Users:
     def __init__(self, db_name="./db/users.db"):
@@ -26,57 +25,70 @@ class Users:
         self.connection.commit()
 
     def split_DNI(self, DNI):
-        return (int(DNI[0:8]), DNI[-1])
+        if len(DNI) != 9:
+            return False
+        
+        if not DNI[0:8].isdigit():
+            return False
+        
+        return (int(DNI[0:8]))
 
     def add_user(self, DNI, name, first_surname, second_surname, email, password, salt, private_key):
         # Añadir nuevo admin a la base de datos
-        try:
-            DNI = self.split_DNI(DNI)[0]
-        except:
+        DNI_shorten = self.split_DNI(DNI)
+        if DNI_shorten == False:
             return False
-        try:
-            self.cursor.execute(
-                "INSERT INTO users (DNI, name, first_surname, second_surname, email, password, salt, private_key) VALUES "
-                "(?, ?, ?, ?, ?, ?, ?, ?)",
-                (DNI, name, first_surname, second_surname, email, password, salt, private_key))
-            self.connection.commit()
-            return True
-        except sqlite3.IntegrityError:
-            return False
+        else:
+            try:
+                self.cursor.execute(
+                    "INSERT INTO users (DNI, name, first_surname, second_surname, email, password, salt, private_key) VALUES "
+                    "(?, ?, ?, ?, ?, ?, ?, ?)",
+                    (DNI_shorten, name, first_surname, second_surname, email, password, salt, private_key))
+                self.connection.commit()
+                return True
+            except sqlite3.IntegrityError:
+                return False
 
-    def check_user(self, DNI_or_email):
-        # Buscar usuario por nombre de usuario o email
-        user = self.cursor.execute(
-            "SELECT * FROM users WHERE DNI=? OR email=?",
-            (DNI_or_email, DNI_or_email)).fetchone()
+    def check_user(self, DNI_or_email_or_name):
+        DNI = self.split_DNI(DNI_or_email_or_name)
+        if DNI != False:
+            user = self.cursor.execute(
+            "SELECT * FROM users WHERE DNI=?",
+            (DNI,)).fetchone()
+
+        else:    
+            user = self.cursor.execute(
+                "SELECT * FROM users WHERE email=? OR name=?",
+                (DNI_or_email_or_name, DNI_or_email_or_name.upper())
+            ).fetchone()
+
         if user is None:
             return False
-        user = dict(user)
-        return user
+        return dict(user)
 
     def list_users(self):
         # Devolver lista de todos los usuarios
         return self.cursor.execute("SELECT * FROM users").fetchall()
 
-    def update_password(self, DNI, password, private_key):
+    def update_password(self, name, password, private_key):
         # Cambiar la contraseña
-        self.cursor.execute("UPDATE users SET password=?, private_key=? WHERE DNI=?",
-                            (password, private_key, DNI))
+        self.cursor.execute("UPDATE users SET password=?, private_key=? WHERE name=?",
+                            (password, private_key, name))
         self.connection.commit()
 
-    def remove_user(self, DNI):
+    def remove_user(self, name):
         # Eliminar Usuario
-        self.cursor.execute("DELETE FROM users WHERE DNI=?", (DNI,))
+        self.cursor.execute("DELETE FROM users WHERE name=?", (name,))
         self.connection.commit()
 
-    def promote_user(self, DNI):
+    def promote_user(self, name):
         # Ascender a admin a un usuario
-        self.cursor.execute("UPDATE users SET role='admin' WHERE DNI=?", (DNI,))
+        self.cursor.execute("UPDATE users SET role='admin' WHERE name=?", (name,))
         self.connection.commit()
 
-    def update_certificate(self, DNI, certificate):
+    def update_certificate(self, name, certificate):
         # Actualizar certificado
-        self.cursor.execute("UPDATE users SET certificate=? WHERE DNI=?", (certificate, DNI))
+        self.cursor.execute("UPDATE users SET certificate=? WHERE name=?", (certificate, name))
         self.connection.commit()
 
 

@@ -16,7 +16,7 @@
         {% for user in users %}
             <div class="user">
                 <div class="left">
-                    <li>Usuario: {{ user["username"] }} -
+                    <li>Usuario: {{ user["name"] }} -
                         Email: {{user["email"]}} -
                         Contraseña: {{user["password"]}} - Rol: {{ user["role"] }}
                     </li>
@@ -24,7 +24,7 @@
                 <div class="rigth">
                     {%  if user["role"] != "admin" %}
                         <form method="POST">
-                            <input type="hidden" name="username" value="{{ user["username"] }}">
+                            <input type="hidden" name="username" value="{{ user["name"] }}">
                             <button type="submit" name="delete" id="delete">
                                 <img src="/static/images/bin.png" alt="Eliminar">
                             </button>

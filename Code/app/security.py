@@ -289,16 +289,17 @@ def create_request(username, public_key, private_key):
 
 def open_certificate(cert_path):
     # Función para abrir un certificado y leer sus datos
+    cert_path = cert_path.strip()
     with open(cert_path, "rb") as f:
         cert_data = f.read()
-
     logging.info("Certificado %s abierto y leido", cert_path)
-
     return x509.load_pem_x509_certificate(cert_data, default_backend())
+
 
 
 def verify_certificate(cert_path):
     # Verificar la validez de un certificado
+    cert_path = cert_path.strip()
     cert_path = "AC/nuevoscerts/" + cert_path + ".pem"
     user_cert = open_certificate(cert_path)
 
@@ -339,6 +340,7 @@ def verify_validity(cert):
 
 def get_public_key_from_certificate(cert_path):
     # Obtener la clave pública de un certificado
+    cert_path = cert_path.strip()
     cert_path = "./AC/nuevoscerts/" + cert_path + ".pem"
     cert = open_certificate(cert_path)
 

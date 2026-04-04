@@ -41,7 +41,7 @@ procesar_certificado() {
     fi
 
     # Obtener el índice del certificado en index.txt
-    INDEX=$(grep -w "CN=$USERNAME" "$DIR/index.txt" | awk '{if ($1 == "V") print $3}')
+    INDEX=$(grep -w "CN=$USERNAME" "$DIR/index.txt" | awk '{if ($1 == "V") print $3}' | tr -d '\r')
 
     if [ -n "$INDEX" ]; then
         # Si se encuentra el índice en el archivo, revocar el certificado
@@ -65,7 +65,7 @@ procesar_certificado() {
         return 0
     fi
     
-    SERIAL=$(cat "$DIR/serial")
+    SERIAL=$(cat "$DIR/serial" | tr -d '\r\n')
 
     # Aprobar la solicitud
     echo "🔄 Firmando el certificado..."

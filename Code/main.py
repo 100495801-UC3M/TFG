@@ -44,7 +44,7 @@ def register():
 
     if request.method == "POST":
         DNI = request.form["DNI"].strip().upper()
-        name = request.form["username"].strip().upper()
+        name = request.form["username"].strip().lower()
         first_surname = request.form["username"].strip().upper()
         second_surname = request.form["username"].strip().upper()
         email = request.form["email"].strip().lower()
@@ -71,7 +71,7 @@ def register():
         salt = security.generate_salt_aes("salt", 16)
         hashed_password = security.hash(password, salt)
         private_key, public_key = security.generate_keys()
-        security.create_request(DNI, public_key, private_key)
+        security.create_request(name, public_key, private_key)
         private_key_encrypted = security.encrypt_private_key(private_key, password, salt)
 
         # Generar token único con expiración de 5 minutos
@@ -98,12 +98,8 @@ def register():
             f"Si no ha solicitado este registro, ignore este correo."
         )
 
-        status, response = security.send_email_gmail_api(
-            '"AGULE Registro" <mariohidtfg@gmail.com>',
-            email,
-            subject,
-            body
-        )
+        status, response = security.send_email_gmail_api('"AGULE Registro" <mariohidtfg@gmail.com>', email,
+            subject, body)
 
         if status == 200:
             logging.info(f"Correo de confirmación enviado a {email}.")
@@ -126,9 +122,9 @@ def login():
     if request.method == "POST":
         if request.form.get("form_id") == "loginForm":
             # Recibe los datos del cuestionario y comprueba si el usuario está registrado
-            username_or_email = request.form["username_or_email"].lower()
+            dni_or_username_or_email = request.form["username_or_email"].lower()
             password = request.form["password"]
-            user = users_db.check_user(username_or_email)
+            user = users_db.check_user(dni_or_username_or_email)
 
             if user is not False:
                 # Recupera el salt y verifica si la contraseña es correcta
@@ -140,7 +136,7 @@ def login():
                     if route != "" and route is not None:
                         # Se comprueba si el certificado es válido
                         if security.verify_certificate(route):
-                            session["username"] = user["username"]
+                            session["username"] = user["name"]
                             session["role"] = user["role"]
 
                             private_key = security.decrypt_private_key(user["private_key"], password, salt)
@@ -148,31 +144,31 @@ def login():
                             session["private_key"] = private_key
 
                             session.permanent = True
-                            logging.info(f"Usuario {username_or_email} ha iniciado sesión.")
+                            logging.info(f"Usuario {dni_or_username_or_email} ha iniciado sesión.")
                             return redirect(url_for("home"))
                         else:
                             # Si el certificado no es válido, se revoca y se crea un nuevo request con los mismos datos
                             public_key = security.get_public_key_from_certificate(route)
                             private_key = security.decrypt_private_key(user["private_key"], password, salt)
-                            security.create_request(user["username"], public_key , private_key)
+                            security.create_request(user["name"], public_key , private_key)
 
-                            logging.error(f"Certificado alterado o caducado para {username_or_email}.")
+                            logging.error(f"Certificado alterado o caducado para {dni_or_username_or_email}.")
                             error = "Ha habido un error con su certificado, debe esperar a que sea aprobado en el sistema nuevamente"
                             return render_template("login.html", error=error)
                     else:
                         # Si directamente no existe una ruta para acceder al certificado puede ser que esté en espera
-                        logging.error(f"Certificado en espera o no aceptado para {username_or_email}.")
-                        error = "Debe esperar a que sea aprobado en el sistema"
+                        logging.error(f"Certificado en espera o no aceptado para {dni_or_username_or_email}.")
+                        error = "Debe esperar a que sea aprobado en el sistema."
                         return render_template("login.html", error=error)
                 else:
                     # Si los datos de contraseña son incorrectos
-                    logging.error(f"Intento fallido de inicio de sesión para {username_or_email}.")
-                    error = "Usuario o contraseña incorrectos o la cuenta no existe"
+                    logging.error(f"Intento fallido de inicio de sesión para {dni_or_username_or_email}.")
+                    error = "Contraseña incorrecta o la cuenta no existe"
                     return render_template("login.html", error=error)
             else:
                 # Si los datos de usuario son incorrectos (exactamente el mismo mensaje que para la contraseña para no dar indicios)
-                logging.error(f"Intento fallido de inicio de sesión para {username_or_email}.")
-                error = "Usuario o contraseña incorrectos o la cuenta no existe"
+                logging.error(f"Intento fallido de inicio de sesión para {dni_or_username_or_email}.")
+                error = "Usuario {user} incorrecto o la cuenta no existe"
                 return render_template("login.html", error=error)
     else:
         return render_template("login.html")
@@ -373,7 +369,7 @@ def profile():
         return redirect(url_for("login"))
     else:
         user = users_db.check_user(session["username"])
-        username = user["username"]
+        username = user["name"]
 
         # Función para cambiar la contraseña (con verificación de contraseña)
         if request.method == "POST" and "change_password" in request.form:
