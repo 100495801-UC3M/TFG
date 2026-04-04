@@ -163,12 +163,12 @@ def login():
                 else:
                     # Si los datos de contraseña son incorrectos
                     logging.error(f"Intento fallido de inicio de sesión para {dni_or_username_or_email}.")
-                    error = "Contraseña incorrecta o la cuenta no existe"
+                    error = "Usuario o contraseña incorrecta o la cuenta no existe"
                     return render_template("login.html", error=error)
             else:
                 # Si los datos de usuario son incorrectos (exactamente el mismo mensaje que para la contraseña para no dar indicios)
                 logging.error(f"Intento fallido de inicio de sesión para {dni_or_username_or_email}.")
-                error = "Usuario {user} incorrecto o la cuenta no existe"
+                error = "Usuario o contraseña incorrecta o la cuenta no existe"
                 return render_template("login.html", error=error)
     else:
         return render_template("login.html")
