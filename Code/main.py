@@ -536,9 +536,9 @@ def forgot_password():
             }
             reset_url = f"{request.host_url}reset_password/{token}"
 
-            from_email = '"AGULE - Recuperación de contraseña" <mariohidtfg@gmail.com>'
+            from_email = '"AGULE - Recuperacion de contraseña" <mariohidtfg@gmail.com>'
             to_email = user["email"]
-            subject = "Recuperación de contraseña - AGULE"
+            subject = "Recuperacion de contraseña - AGULE"
             body = (
                 f"Hola,\n\n"
                 f"Hemos recibido una solicitud para cambiar la contraseña de tu cuenta.\n\n"
