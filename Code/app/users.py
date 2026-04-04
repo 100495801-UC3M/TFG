@@ -13,7 +13,7 @@ class Users:
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 DNI INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
+                name TEXT NOT NULL UNIQUE,
                 first_surname TEXT,
                 second_surname TEXT,
                 email TEXT NOT NULL UNIQUE,
@@ -49,17 +49,15 @@ class Users:
             except sqlite3.IntegrityError:
                 return False
 
-    def check_user(self, DNI_or_email_or_name):
-        DNI = self.split_DNI(DNI_or_email_or_name)
-        if DNI != False:
+    def check_user(self, identifier):
+        if type(identifier) == int:
             user = self.cursor.execute(
-            "SELECT * FROM users WHERE DNI=?",
-            (DNI,)).fetchone()
-
-        else:    
+                "SELECT * FROM users WHERE DNI=?", (identifier,)
+            ).fetchone()
+        else:
             user = self.cursor.execute(
                 "SELECT * FROM users WHERE email=? OR name=?",
-                (DNI_or_email_or_name, DNI_or_email_or_name.upper())
+                (identifier, identifier.upper())
             ).fetchone()
 
         if user is None:
@@ -70,25 +68,36 @@ class Users:
         # Devolver lista de todos los usuarios
         return self.cursor.execute("SELECT * FROM users").fetchall()
 
-    def update_password(self, name, password, private_key):
+    def update_password(self, DNI, password, private_key):
         # Cambiar la contraseña
-        self.cursor.execute("UPDATE users SET password=?, private_key=? WHERE name=?",
-                            (password, private_key, name))
+        self.cursor.execute("UPDATE users SET password=?, private_key=? WHERE DNI=?",
+                            (password, private_key, DNI))
         self.connection.commit()
 
-    def remove_user(self, name):
+    def remove_user(self, DNI):
         # Eliminar Usuario
-        self.cursor.execute("DELETE FROM users WHERE name=?", (name,))
+        self.cursor.execute("DELETE FROM users WHERE DNI=?", (DNI,))
         self.connection.commit()
 
-    def promote_user(self, name):
+    def promote_user(self, DNI):
         # Ascender a admin a un usuario
-        self.cursor.execute("UPDATE users SET role='admin' WHERE name=?", (name,))
+        self.cursor.execute("UPDATE users SET role='admin' WHERE DNI=?", (DNI,))
         self.connection.commit()
 
-    def update_certificate(self, name, certificate):
-        # Actualizar certificado
-        self.cursor.execute("UPDATE users SET certificate=? WHERE name=?", (certificate, name))
+    def update_certificate(self, identifier, certificate):
+        if type(identifier) == int:
+            self.cursor.execute("UPDATE users SET certificate=? WHERE DNI=?",
+                                (certificate, identifier))
+        else:
+            self.cursor.execute("UPDATE users SET certificate=? WHERE name=? OR email=?",
+                                (certificate, identifier, identifier))
+        self.connection.commit()
+
+    def update_password_reset(self, DNI, password, private_key):
+        self.cursor.execute(
+            "UPDATE users SET password=?, private_key=?, certificate='' WHERE DNI=?",
+            (password, private_key, DNI)
+        )
         self.connection.commit()
 
 

@@ -21,10 +21,13 @@
                 <input type="password" id="password" name="password" required><br>
             </div>
 
-            <!-- Mensaje de error si hay -->
             {% if error %}
-                <p style="color:red;">{{ error }}</p>
-            {% endif %}
+            <p style="color:red;">{{ error }}</p>
+            <p style="margin-top: 8px; font-size: 0.9em;">
+                ¿No recuerda su contraseña? Entonces cámbiela
+                <a href="/forgot_password">aquí</a>.
+            </p>
+        {% endif %}
 
             <button type="submit">Iniciar Sesión</button>
         </form>    

@@ -35,12 +35,16 @@
             <!-- Mensaje de error si hay -->
             {% if error %}
                 <p style="color:red;">{{ error }}</p>
+                <p style="margin-top: 8px; font-size: 0.9em;">
+                    ¿No recuerda su usuario? Entonces cambie su contraseña
+                    <a href="/forgot_password">aquí</a>.
+                </p>
             {% endif %}
 
             <!-- Mensaje informativo si hay -->
             {% if info %}
                 <p style="color:green;">{{ info }}</p>
-            {% endif %}ndif %}
+            {% endif %}
             
 
             <button type="submit">Registrarse</button>

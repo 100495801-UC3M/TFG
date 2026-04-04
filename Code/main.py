@@ -6,6 +6,7 @@ import json
 import requests
 import time
 import uuid
+import secrets
 from datetime import timedelta
 import app.security as security
 from app.users import Users
@@ -26,6 +27,7 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=5)
 users_db = Users()
 messages_db = Messages()
 pending_registrations = {}
+reset_tokens = {}
 
 # Configuración logging para que se muestre en la consola
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -66,7 +68,7 @@ def register():
             return render_template("register.html", error="Las contraseñas no coinciden")
 
         if users_db.check_user(DNI) or users_db.check_user(email):
-            return render_template("register.html", error="Usuario o email ya registrado. ¿Desea cambiar la contraseña?")
+            return render_template("register.html", error="Usuario o email ya registrado.")
 
         salt = security.generate_salt_aes("salt", 16)
         hashed_password = security.hash(password, salt)
@@ -98,7 +100,7 @@ def register():
             f"Si no ha solicitado este registro, ignore este correo."
         )
 
-        status, response = security.send_email_gmail_api('"AGULE Registro" <mariohidtfg@gmail.com>', email,
+        status, response = security.send_email_gmail_api('"AGULE - Registro" <mariohidtfg@gmail.com>', email,
             subject, body)
 
         if status == 200:
@@ -369,6 +371,7 @@ def profile():
         return redirect(url_for("login"))
     else:
         user = users_db.check_user(session["username"])
+        DNI = user["DNI"]
         username = user["name"]
 
         # Función para cambiar la contraseña (con verificación de contraseña)
@@ -400,7 +403,7 @@ def profile():
             private_key = security.encrypt_private_key(private_key, new_password, salt)
 
             hashed_password = security.hash(new_password, salt)
-            users_db.update_password(username, hashed_password, private_key)
+            users_db.update_password(DNI, hashed_password, private_key)
             success = "Las contraseña ha sido actualizada correctamente"
 
             return render_template("profile.html", username=username, success=success)
@@ -513,7 +516,90 @@ def confirm_register(token):
         logging.info(f"Usuario {data['name']} registrado tras confirmación por email.")
         return redirect(url_for("login"))
     else:
-        return render_template("register.html", error="Usuario o email ya registrados. ¿Desea cambiar la contraseña?")
+        return render_template("register.html", error="Usuario o email ya registrados.")
+
+@app.route("/forgot_password", methods=["GET", "POST"])
+def forgot_password():
+    if request.method == "POST":
+        identifier = request.form["identifier"].strip()
+        if users_db.split_DNI(identifier) != False:
+            identifier = users_db.split_DNI(identifier)
+
+        user = users_db.check_user(identifier)
+        success = "Si el usuario existe, recibirás un correo con las instrucciones."
+
+        if user:
+            token = secrets.token_urlsafe(32)
+            reset_tokens[token] = {
+                "DNI": user["DNI"],
+                "expires_at": time.time() + 300
+            }
+            reset_url = f"{request.host_url}reset_password/{token}"
+
+            from_email = '"AGULE - Recuperación de contraseña" <mariohidtfg@gmail.com>'
+            to_email = user["email"]
+            subject = "Recuperación de contraseña - AGULE"
+            body = (
+                f"Hola,\n\n"
+                f"Hemos recibido una solicitud para cambiar la contraseña de tu cuenta.\n\n"
+                f"Haz clic en el siguiente enlace para establecer una nueva contraseña:\n\n"
+                f"{reset_url}\n\n"
+                f"Este enlace expirará en 5 minutos.\n\n"
+                f"Si no has solicitado este cambio, ignora este mensaje."
+            )
+            try:
+                security.send_email_gmail_api(from_email, to_email, subject, body)
+            except Exception as e:
+                logging.error(f"Error enviando correo de recuperación: {e}")
+
+        return render_template("forgot_password.html", success=success)
+
+    return render_template("forgot_password.html")
+
+
+@app.route("/reset_password/<token>", methods=["GET", "POST"])
+def reset_password(token):
+    token_data = reset_tokens.get(token)
+
+    if not token_data or time.time() > token_data["expires_at"]:
+        return render_template("reset_password.html",
+                               error="El enlace ha caducado o no es válido.",
+                               token=None)
+
+    if request.method == "POST":
+        new_password = request.form["new_password"]
+        new_password2 = request.form["new_password2"]
+
+        if not security.check_password(new_password):
+            error = ("La contraseña es inválida. Debe tener al menos 6 caracteres, "
+                     "una mayúscula, una minúscula, un número y un carácter especial "
+                     "($!%*?&_¿@#=-). No puede incluir espacios.")
+            return render_template("reset_password.html", error=error, token=token)
+
+        if new_password != new_password2:
+            return render_template("reset_password.html",
+                                   error="Las contraseñas no coinciden.", token=token)
+
+        DNI = token_data["DNI"]
+        user = users_db.check_user(DNI)
+        if not user:
+            return render_template("reset_password.html",
+                                   error="Error al procesar la solicitud.", token=None)
+
+        salt = base64.urlsafe_b64decode(user["salt"])
+        hashed_password = security.hash(new_password, salt)
+
+        private_key, public_key = security.generate_keys()
+        security.create_request(user["name"], public_key, private_key)
+        private_key_encrypted = security.encrypt_private_key(private_key, new_password, salt)
+
+        users_db.update_password_reset(DNI, hashed_password, private_key_encrypted)
+        del reset_tokens[token]
+
+        logging.info(f"Contraseña restablecida para DNI {DNI}. Nueva solicitud de certificado generada.")
+        return redirect(url_for("login"))
+
+    return render_template("reset_password.html", token=token)
 
 if __name__ == "__main__":
     # Para muestra en la defensa se ha creado un certificado autofirmado para que la web aparezca como insegura
