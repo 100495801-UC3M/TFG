@@ -28,6 +28,7 @@ users_db = Users()
 messages_db = Messages()
 pending_registrations = {}
 reset_tokens = {}
+SECRET_KEY = security.load_search_secret()
 
 # Configuración logging para que se muestre en la consola
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -56,6 +57,9 @@ def register():
         error = security.DNI_valid(DNI)
         if error[0] == False:
             return render_template("register.html", error=error[1])
+        
+        if "@" in name:
+            return render_template("register.html", error="El usuario no puede tener @")
 
         if not security.check_password(password):
             error = ("La contraseña es inválida. Debe tener al menos 6 "
@@ -67,10 +71,14 @@ def register():
         if password != password2:
             return render_template("register.html", error="Las contraseñas no coinciden")
 
-        if users_db.check_user(DNI) or users_db.check_user(email):
+        dni_index = security.make_search_index(DNI, SECRET_KEY)
+        email_index = security.make_search_index(email, SECRET_KEY)
+        if users_db.check_user(dni_index, "DNI") or users_db.check_user(email_index, "email"):
             return render_template("register.html", error="Usuario o email ya registrado.")
 
         salt = security.generate_salt_aes("salt", 16)
+        dni_encrypted = security.encrypt_field(DNI, SECRET_KEY)
+        email_encrypted = security.encrypt_field(email, SECRET_KEY)
         hashed_password = security.hash(password, salt)
         private_key, public_key = security.generate_keys()
         security.create_request(name, public_key, private_key)
@@ -79,15 +87,18 @@ def register():
         # Generar token único con expiración de 5 minutos
         token = str(uuid.uuid4())
         pending_registrations[token] = {
-            "DNI": DNI,
+            "DNI": dni_index,
+            "DNI_search": dni_encrypted,
             "name": name,
             "first_surname": first_surname,
             "second_surname": second_surname,
-            "email": email,
+            "email": email_index,
+            "email_search": email_encrypted,
             "hashed_password": hashed_password,
+            "created_at": time.time(),
             "salt": base64.urlsafe_b64encode(salt).decode(),
             "private_key": private_key_encrypted,
-            "expires_at": time.time() + 300  # 5 minutos
+            "expires_at": time.time() + 300,  # 5 minutos
         }
 
         confirm_url = f"https://localhost:5000/confirm/{token}"
@@ -126,7 +137,13 @@ def login():
             # Recibe los datos del cuestionario y comprueba si el usuario está registrado
             dni_or_username_or_email = request.form["username_or_email"].lower()
             password = request.form["password"]
-            user = users_db.check_user(dni_or_username_or_email)
+
+            type = users_db.identifier_type(dni_or_username_or_email)
+            if type == "DNI" or type == "email":
+                identifier = security.make_search_index(dni_or_username_or_email, SECRET_KEY)
+            else:
+                identifier = dni_or_username_or_email
+            user = users_db.check_user(identifier, type)
 
             if user is not False:
                 # Recupera el salt y verifica si la contraseña es correcta
@@ -190,7 +207,7 @@ def home():
         private_key = security.deserialize_private_key(session["private_key"])
         message = messages_db.get_message(int(person[0]))
 
-        user  = users_db.check_user(session["username"])
+        user  = users_db.check_user(session["username"], "name")
         route = user["certificate"]
         public_key = security.get_public_key_from_certificate(route)
 
@@ -203,7 +220,14 @@ def home():
         if "search_form" in request.form:
             # Comprueba que el usuario está registrado en la base de datos
             user_searched_input = request.form["user_searched"]
-            user_searched_data = users_db.check_user(user_searched_input)
+
+            type = users_db.identifier_type(user_searched_input)
+            if type == "DNI" or type == "email":
+                identifier = security.make_search_index(user_searched_input, SECRET_KEY)
+            else:
+                identifier = user_searched_input
+            user_searched_data = users_db.check_user(identifier, type)
+
             if user_searched_data:
                 # Si existe, devolver la conversación con dicho usuario
                 session["found"] = True
@@ -211,7 +235,7 @@ def home():
                 conversations = messages_db.conversations(session["username"], session["user_searched"])
                 private_key = security.deserialize_private_key(session["private_key"])
 
-                user = users_db.check_user(session["username"])
+                user = users_db.check_user(session["username"], "name")
                 route = user["certificate"]
                 public_key = security.get_public_key_from_certificate(route)
 
@@ -229,7 +253,7 @@ def home():
             message = request.form["message"]
             user_searched = session.get("user_searched")
             if user_searched:
-                receiver = users_db.check_user(user_searched)
+                receiver = users_db.check_user(user_searched, "name")
                 route = receiver["certificate"]
 
                 # Coge la clave pública del otro usuario
@@ -244,7 +268,7 @@ def home():
                     return render_template("home.html", list_conversations = list, role=session["role"], error=error)
 
                 # Para enviar un mensaje, se cogen las claves públicas de ambos usuarios
-                sender = users_db.check_user(session["username"])
+                sender = users_db.check_user(session["username"], "name")
                 route = sender["certificate"]
                 sender_public_key = security.get_public_key_from_certificate(route)
 
@@ -280,7 +304,7 @@ def home():
         conversations = messages_db.conversations(session["username"], session.get("user_searched"))
         private_key = security.deserialize_private_key(session["private_key"])
 
-        user = users_db.check_user(session["username"])
+        user = users_db.check_user(session["username"], "name")
         route = user["certificate"]
 
         public_key = security.get_public_key_from_certificate(route)
@@ -346,7 +370,7 @@ def list_messages():
         message = messages_db.get_message(message_id)
         private_key = security.deserialize_private_key(session["private_key"])
 
-        user = users_db.check_user(session["username"])
+        user = users_db.check_user(session["username"], "name")
         route = user["certificate"]
         public_key = security.get_public_key_from_certificate(route)
 
@@ -370,8 +394,7 @@ def profile():
     if "username" not in session:
         return redirect(url_for("login"))
     else:
-        user = users_db.check_user(session["username"])
-        DNI = user["DNI"]
+        user = users_db.check_user(session["username"], "name")
         username = user["name"]
 
         # Función para cambiar la contraseña (con verificación de contraseña)
@@ -403,7 +426,7 @@ def profile():
             private_key = security.encrypt_private_key(private_key, new_password, salt)
 
             hashed_password = security.hash(new_password, salt)
-            users_db.update_password(DNI, hashed_password, private_key)
+            users_db.update_password(username, hashed_password, private_key)
             success = "Las contraseña ha sido actualizada correctamente"
 
             return render_template("profile.html", username=username, success=success)
@@ -501,11 +524,14 @@ def confirm_register(token):
     # Guardar usuario ahora
     result = users_db.add_user(
         data["DNI"],
+        data["DNI_search"],
         data["name"],
         data["first_surname"],
         data["second_surname"],
         data["email"],
+        data["email_search"],
         data["hashed_password"],
+        data["created_at"],
         data["salt"],
         data["private_key"]
     )
@@ -522,23 +548,24 @@ def confirm_register(token):
 def forgot_password():
     if request.method == "POST":
         identifier = request.form["identifier"].strip()
-        if users_db.split_DNI(identifier) != False:
-            identifier = users_db.split_DNI(identifier)
+        type = users_db.identifier_type(identifier)
+        if type == "DNI" or type == "email":
+            identifier = security.make_search_index(identifier, SECRET_KEY)  # HMAC, no encrypt
+        user = users_db.check_user(identifier, type)
 
-        user = users_db.check_user(identifier)
         success = "Si el usuario existe, recibirás un correo con las instrucciones."
 
         if user:
             token = secrets.token_urlsafe(32)
             reset_tokens[token] = {
-                "DNI": user["DNI"],
+                "name": user["name"],
                 "expires_at": time.time() + 300
             }
             reset_url = f"{request.host_url}reset_password/{token}"
 
-            from_email = '"AGULE - Recuperacion de contraseña" <mariohidtfg@gmail.com>'
-            to_email = user["email"]
-            subject = "Recuperacion de contraseña - AGULE"
+            from_email = '"AGULE - Recuperación de contraseña" <mariohidtfg@gmail.com>'
+            to_email = security.decrypt_field(user["email_search"], SECRET_KEY)
+            subject = "Recuperación de contraseña - AGULE"
             body = (
                 f"Hola,\n\n"
                 f"Hemos recibido una solicitud para cambiar la contraseña de tu cuenta.\n\n"
@@ -560,7 +587,6 @@ def forgot_password():
 @app.route("/reset_password/<token>", methods=["GET", "POST"])
 def reset_password(token):
     token_data = reset_tokens.get(token)
-
     if not token_data or time.time() > token_data["expires_at"]:
         return render_template("reset_password.html",
                                error="El enlace ha caducado o no es válido.",
@@ -580,27 +606,26 @@ def reset_password(token):
             return render_template("reset_password.html",
                                    error="Las contraseñas no coinciden.", token=token)
 
-        DNI = token_data["DNI"]
-        user = users_db.check_user(DNI)
+        # Buscar usuario por el índice DNI guardado en el token
+        user = users_db.check_user(token_data["name"], "name")
         if not user:
             return render_template("reset_password.html",
                                    error="Error al procesar la solicitud.", token=None)
 
+        # Calcular nueva contraseña y nueva clave privada
         salt = base64.urlsafe_b64decode(user["salt"])
         hashed_password = security.hash(new_password, salt)
-
         private_key, public_key = security.generate_keys()
         security.create_request(user["name"], public_key, private_key)
         private_key_encrypted = security.encrypt_private_key(private_key, new_password, salt)
 
-        users_db.update_password_reset(DNI, hashed_password, private_key_encrypted)
+        users_db.update_password_reset(user["name"], hashed_password, private_key_encrypted)
         del reset_tokens[token]
 
-        logging.info(f"Contraseña restablecida para DNI {DNI}. Nueva solicitud de certificado generada.")
+        logging.info(f"Contraseña restablecida para {user['name']}.")
         return redirect(url_for("login"))
 
     return render_template("reset_password.html", token=token)
-
 if __name__ == "__main__":
     # Para muestra en la defensa se ha creado un certificado autofirmado para que la web aparezca como insegura
     app.run(ssl_context=("config/cert.pem", "config/key.pem"), debug=True)

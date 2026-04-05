@@ -5,6 +5,10 @@ import base64
 import requests # para enviar correos
 import time # para enviar correos
 import json # para enviar correos
+from email.header import Header # para enviar correos
+from email.utils import formataddr # para enviar correos
+import hmac as hmac_module
+import hashlib
 
 from app.users import Users
 from datetime import datetime
@@ -399,15 +403,24 @@ def verify_message(encryped_message, hmac, signature, public_key):
 
 
 def send_email_gmail_api(from_email: str, to_email: str, subject: str, body: str):
-    """Enviar correo usando Gmail API."""
-    from_email = from_email.strip().strip('"')
     to_email = to_email.strip().strip('"')
+    subject_encoded = Header(subject, "utf-8").encode()
 
-    # 1. Construir el mensaje en texto plano (RFC 2822) sin indentación y con CRLF
+    # Separar nombre y dirección, codificar solo el nombre
+    # from_email viene como: 'AGULE - Recuperacion <mariohidtfg@gmail.com>'
+    match = re.match(r'^"?([^"<]+)"?\s*<([^>]+)>$', from_email.strip())
+    if match:
+        name = match.group(1).strip()
+        address = match.group(2).strip()
+        from_encoded = formataddr((Header(name, "utf-8").encode(), address))
+    else:
+        from_encoded = from_email
+
     message_lines = [
-        f"From: {from_email}",
+        f"From: {from_encoded}",
         f"To: {to_email}",
-        f"Subject: {subject}",
+        f"Subject: {subject_encoded}",
+        "Content-Type: text/plain; charset=utf-8",
         "",
         body
     ]
@@ -495,3 +508,41 @@ def refresh_access_token():
         "access_token": token_data["access_token"],
         "expires_at": time.time() + token_data["expires_in"]
     }
+
+def load_search_secret():
+    secret_path = "./config/search_secret.key"
+    
+    if os.path.exists(secret_path):
+        with open(secret_path, "rb") as f:
+            return f.read().strip()
+    
+    # Si no existe, generarla automáticamente y guardarla
+    secret = os.urandom(32)
+    os.makedirs("./config", exist_ok=True)
+    with open(secret_path, "wb") as f:
+        f.write(secret)
+    logging.warning("search_secret.key generada automáticamente en config/")
+    return secret
+
+def make_search_index(value, SECRET_KEY):
+    """Genera un índice ciego determinista para búsquedas."""
+    value_normalized = value.strip().upper()
+    tag = hmac_module.new(SECRET_KEY, value_normalized.encode(), hashlib.sha256).hexdigest()
+    return tag
+
+def encrypt_field(value, server_key):
+    """Cifra un campo con AES-GCM para almacenamiento."""
+    iv = os.urandom(12)
+    cipher = Cipher(algorithms.AES(server_key), modes.GCM(iv))
+    enc = cipher.encryptor()
+    ct = enc.update(value.encode()) + enc.finalize()
+    # Guardar iv + tag + ciphertext en base64
+    return base64.b64encode(iv + enc.tag + ct).decode()
+
+def decrypt_field(encrypted, server_key) -> str:
+    """Descifra un campo almacenado con encrypt_field."""
+    raw = base64.b64decode(encrypted)
+    iv, tag, ct = raw[:12], raw[12:28], raw[28:]
+    cipher = Cipher(algorithms.AES(server_key), modes.GCM(iv, tag))
+    dec = cipher.decryptor()
+    return (dec.update(ct) + dec.finalize()).decode()
