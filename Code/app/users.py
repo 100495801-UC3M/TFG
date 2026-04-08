@@ -1,5 +1,7 @@
 import sys
 import sqlite3
+from datetime import datetime
+
 
 class Users:
     def __init__(self, db_name="./db/users.db"):
@@ -16,13 +18,11 @@ class Users:
                 DNI TEXT NOT NULL UNIQUE,
                 DNI_search TEXT NOT NULL UNIQUE,
                 name TEXT NOT NULL UNIQUE,
-                first_surname TEXT,
-                second_surname TEXT,
                 email TEXT NOT NULL UNIQUE,
                 email_search TEXT NOT NULL UNIQUE,
                 password TEXT NOT NULL,
                 role TEXT DEFAULT "client",
-                created_at FLOAT,
+                created_at TEXT NOT NULL,
                 salt TEXT NOT NULL,
                 private_key TEXT,
                 certificate TEXT)''')
@@ -38,16 +38,17 @@ class Users:
         return (int(DNI[0:8]))
 
 
-    def add_user(self, DNI, DNI_search, name, first_surname, second_surname, 
-                email, email_search, password, created_at, salt, private_key):
+    def add_user(self, DNI, DNI_search, name, email, email_search,
+                 password, salt, private_key):
         try:
+            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             self.cursor.execute(
                 """INSERT INTO users 
-                (DNI, DNI_search, name, first_surname, second_surname,
-                    email, email_search, password, created_at, salt, private_key) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (DNI, DNI_search, name, first_surname, second_surname,
-                email, email_search, password, created_at, salt, private_key))
+                (DNI, DNI_search, name, email, email_search,
+                password, created_at, salt, private_key) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (DNI, DNI_search, name, email, email_search,
+                 password, now, salt, private_key))
             self.connection.commit()
             return True
         except sqlite3.IntegrityError:
@@ -58,7 +59,7 @@ class Users:
     def check_user(self, identifier, type):
         if type == "name":
             user = self.cursor.execute(
-                    "SELECT * FROM users WHERE name=?", (identifier.upper(),)).fetchone()
+                "SELECT * FROM users WHERE name=?", (identifier.lower(),)).fetchone()
         elif type == "DNI":
             user = self.cursor.execute(
                     "SELECT * FROM users WHERE DNI=?", (identifier,)).fetchone()

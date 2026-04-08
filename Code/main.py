@@ -10,6 +10,8 @@ import secrets
 from datetime import timedelta
 import app.security as security
 from app.users import Users
+# TODO Quitar para mensajes
+from app.survey import Survey, SurveyAdmins, SurveyWhitelist
 from app.messages import Messages
 from flask import Flask, render_template, request, redirect, url_for, session, abort
 
@@ -25,10 +27,18 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=5)
 
 # Inicializamos las bases de datos
 users_db = Users()
-messages_db = Messages()
+#messages_db = Messages()
+survey_db = Survey()
+surveyAdmins_db = SurveyAdmins()
+surveyWhitelist_db = SurveyWhitelist()
+
+# Inicializamos las variables globales
 pending_registrations = {}
 reset_tokens = {}
+
+# Clave secreta para realizar búsquedas de elementos cifrados
 SECRET_KEY = security.load_search_secret()
+
 
 # Configuración logging para que se muestre en la consola
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -48,8 +58,6 @@ def register():
     if request.method == "POST":
         DNI = request.form["DNI"].strip().upper()
         name = request.form["username"].strip().lower()
-        first_surname = request.form["username"].strip().upper()
-        second_surname = request.form["username"].strip().upper()
         email = request.form["email"].strip().lower()
         password = request.form["password"]
         password2 = request.form["password2"]
@@ -90,12 +98,9 @@ def register():
             "DNI": dni_index,
             "DNI_search": dni_encrypted,
             "name": name,
-            "first_surname": first_surname,
-            "second_surname": second_surname,
             "email": email_index,
             "email_search": email_encrypted,
             "hashed_password": hashed_password,
-            "created_at": time.time(),
             "salt": base64.urlsafe_b64encode(salt).decode(),
             "private_key": private_key_encrypted,
             "expires_at": time.time() + 300,  # 5 minutos
@@ -200,9 +205,9 @@ def home():
     if "username" not in session:
         return redirect(url_for("login"))
 
-    # Coger el último mensaje de todas las conversaciones y mostrarlo
-    list = []
-    list_conversations = messages_db.list_conversations(session["username"])
+    # TODO Quitar para mensajes
+    """# Coger el último mensaje de todas las conversaciones y mostrarlo
+    #list_conversations = messages_db.list_conversations(session["username"])
     for person in list_conversations:
         private_key = security.deserialize_private_key(session["private_key"])
         message = messages_db.get_message(int(person[0]))
@@ -213,7 +218,7 @@ def home():
 
         last_message = security.check_messages(message, session["username"], public_key, private_key)
         last_message = last_message[0][2]
-        list.append([person[1], last_message])
+        list.append([person[1], last_message])"""
 
     # Encontrar un usuario en la barra de búsqueda
     if request.method == "POST":
@@ -232,7 +237,9 @@ def home():
                 # Si existe, devolver la conversación con dicho usuario
                 session["found"] = True
                 session["user_searched"] = user_searched_data["username"]
-                conversations = messages_db.conversations(session["username"], session["user_searched"])
+                
+                # TODO Quitar para mensajes
+                """conversations = messages_db.conversations(session["username"], session["user_searched"])
                 private_key = security.deserialize_private_key(session["private_key"])
 
                 user = users_db.check_user(session["username"], "name")
@@ -240,16 +247,17 @@ def home():
                 public_key = security.get_public_key_from_certificate(route)
 
                 good_messages = security.check_messages(conversations, session["username"], public_key, private_key)
-                session["conversations"] = good_messages
+                session["conversations"] = good_messages"""
             else:
                 session["found"] = False
                 error = "Usuario no encontrado"
-                return render_template("home.html", list_conversations = list, role=session["role"], error=error)
+                return render_template("home.html", role=session["role"], error=error)
             
             return redirect(url_for("home"))
 
         # Para enviar un mensaje a un usuario
-        elif "send_message" in request.form:
+        # TODO Quitar para mensajes
+        """elif "send_message" in request.form:
             message = request.form["message"]
             user_searched = session.get("user_searched")
             if user_searched:
@@ -297,9 +305,10 @@ def home():
                 error = "No hay un usuario buscado para enviar el mensaje"
                 return render_template("home.html", list_conversations = list, role=session["role"], error=error)
             
-            return redirect(url_for("home"))
-
-    if session.get("user_searched") is not None:
+            return redirect(url_for("home"))"""
+        
+    # TODO Quitar para mensajes
+    """if session.get("user_searched") is not None:
         # Escribir en pantalla la conversación con el usuario
         conversations = messages_db.conversations(session["username"], session.get("user_searched"))
         private_key = security.deserialize_private_key(session["private_key"])
@@ -312,11 +321,14 @@ def home():
         good_messages = security.check_messages(conversations, session["username"], public_key, private_key)
         session["conversations"] = good_messages
 
+    conversations = session.get("conversations")"""
     user_searched = session.get("user_searched")
-    conversations = session.get("conversations")
     found = session.get("found")
 
-    return render_template("home.html", list_conversations = list, username=session["username"], role=session["role"], conversations=conversations, found=found, user_searched=user_searched)
+    # TODO Quitar para mensajes
+    # return render_template("home.html", list_conversations = list, username=session["username"], role=session["role"], conversations=conversations, found=found, user_searched=user_searched)
+    return render_template("home.html", list_conversations = list, username=session["username"], role=session["role"], found=found, user_searched=user_searched)
+
 
 
 # PÁGINA EXCLUSIVA PARA ADMINS: Acceder a la lista de usuarios
@@ -333,7 +345,8 @@ def list_users():
     # Función para eliminar un usuario
     if request.method == "POST" and "delete" in request.form:
         user_deleted = request.form.get("username")
-        messages_db.remove_messages(user_deleted)
+        # TODO Quitar para mensajes
+        # messages_db.remove_messages(user_deleted)
         users_db.remove_user(user_deleted)
         logging.info("El usuario se ha eliminado de la tabla de datos correctamente.")
 
@@ -348,7 +361,8 @@ def list_users():
 
 
 # PÁGINA EXCLUSIVA PARA ADMINS: Acceder a la lista de mensajes
-route = re.sub(r"^(\/).*", r"\1messages", route)
+# TODO Quitar para mensajes
+"""route = re.sub(r"^(\/).*", r"\1messages", route)
 @app.route(route, methods=["GET", "POST"])
 def list_messages():
     # Ruta de lista de mensajes
@@ -383,7 +397,7 @@ def list_messages():
         
         return render_template("messages.html", messages=messages_list)
     
-    return render_template("messages.html", messages=messages_list)
+    return render_template("messages.html", messages=messages_list)"""
 
 
 # Página para acceder a tu propio perfil
@@ -433,7 +447,8 @@ def profile():
 
         # Función para eliminar el usuario
         if request.method == "POST" and "delete_account" in request.form:
-            messages_db.remove_messages(session["username"])
+            # TODO Quitar para mensajes
+            #messages_db.remove_messages(session["username"])
             users_db.remove_user(session["username"])
             session.clear()
             return redirect(url_for("index"))
@@ -526,12 +541,9 @@ def confirm_register(token):
         data["DNI"],
         data["DNI_search"],
         data["name"],
-        data["first_surname"],
-        data["second_surname"],
         data["email"],
         data["email_search"],
         data["hashed_password"],
-        data["created_at"],
         data["salt"],
         data["private_key"]
     )
@@ -567,7 +579,7 @@ def forgot_password():
             to_email = security.decrypt_field(user["email_search"], SECRET_KEY)
             subject = "Recuperación de contraseña - AGULE"
             body = (
-                f"Hola,\n\n"
+                f"Hola, {user["name"]}\n\n"
                 f"Hemos recibido una solicitud para cambiar la contraseña de tu cuenta.\n\n"
                 f"Haz clic en el siguiente enlace para establecer una nueva contraseña:\n\n"
                 f"{reset_url}\n\n"
