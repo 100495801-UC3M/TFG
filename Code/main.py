@@ -11,7 +11,7 @@ from datetime import timedelta
 import app.security as security
 from app.users import Users
 # TODO Quitar para mensajes
-from app.survey import Survey, SurveyAdmins, SurveyWhitelist
+from app.survey import Survey, SurveyAdmins, SurveyWhitelist, Questions, QuestionOptions, Answers, SubmittedAnswers, Statistics
 from app.messages import Messages
 from flask import Flask, render_template, request, redirect, url_for, session, abort
 
@@ -25,12 +25,18 @@ app.secret_key = os.urandom(24)
 # Límite de sesión de 5 minutos
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=5)
 
-# Inicializamos las bases de datos
+# Inicializamos las bases de datos y sus tablas
 users_db = Users()
 #messages_db = Messages()
 survey_db = Survey()
-surveyAdmins_db = SurveyAdmins()
-surveyWhitelist_db = SurveyWhitelist()
+surveyAdmins_db = SurveyAdmins(survey_db.connection)
+surveyWhitelist_db = SurveyWhitelist(survey_db.connection)
+questions_db = Questions(survey_db.connection)
+questionOptions_dn = QuestionOptions(survey_db.connection)
+answers_db  = Answers(survey_db.connection)
+submittedAnswers_db= SubmittedAnswers(survey_db.connection)
+statistics_db = Statistics(survey_db.connection)
+
 
 # Inicializamos las variables globales
 pending_registrations = {}
