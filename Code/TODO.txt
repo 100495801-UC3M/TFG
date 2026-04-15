@@ -1,6 +1,4 @@
-1. Trabajar con tokens para que el correo se pueda autenticar
-2. Eliminar TFG/test.py cuando se terminen las pruebas de correo
-3. Hacer que la siguiente función:
+1. Hacer que la siguiente función:
     1. La función "Enviar encuestas al servidor" hace lo siguiente:
     Recibe de parámetros la lista sin cifrar y la lista cifrada de la base de datos.
     2. Transforma la lista de respuestas a una lista cifradas, ya que la de la base de datos ebería estar cifrada ya.
@@ -8,4 +6,6 @@
     3. Coger ambas listas y transmitirlas al servidor con el comando (de momento que sean suma y media)
     4. Recibir la lista de respuestas y colocarlas en el servidor de nuevo. Returnear True si funcionó, False si no.
     5. Si false, decir "ha habido un error, espera un segundo".
-4. Crear las tablas para las encuestas
+
+2. Si buscas un usuario que no tiene encuestas, te notifica de eso. (SI no existe te lo dice)
+3. Crear hash survey id para 

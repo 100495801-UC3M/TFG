@@ -546,3 +546,9 @@ def decrypt_field(encrypted, server_key) -> str:
     cipher = Cipher(algorithms.AES(server_key), modes.GCM(iv, tag))
     dec = cipher.decryptor()
     return (dec.update(ct) + dec.finalize()).decode()
+
+def generate_user_hash(survey_id, username, SECRET_KEY):
+    value_to_hash = f"{survey_id}:{username}".encode()
+    user_hash = hmac_module.new(SECRET_KEY, value_to_hash, hashlib.sha256).hexdigest()
+    logging.info(f"User hash generado para survey_id={survey_id}, username={username}")
+    return user_hash

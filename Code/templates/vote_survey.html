@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Votar en Encuesta - AGULE</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/surveys.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Encabezado de la encuesta -->
+        <div class="survey-info">
+            <h1>{{ survey.title }}</h1>
+            <p>{{ survey.description }}</p>
+            {% if survey.start_at %}
+                <small>Válida desde: {{ survey.start_at }}</small>
+            {% endif %}
+        </div>
+
+        <!-- Mensaje si ya ha votado -->
+        {% if already_voted %}
+            <div class="voted-message">
+                ✓ Ya has votado en esta encuesta. No puedes modificar tu respuesta.
+            </div>
+            <div class="button-group">
+                <form method="POST">
+                    <button type="submit" name="cancel" value="cancel" class="secondary">
+                        Volver a Inicio
+                    </button>
+                </form>
+            </div>
+        {% else %}
+            <!-- Formulario de votación -->
+            <form method="POST">
+                {% for question in questions %}
+                    <div class="question-section">
+                        <h3>#{{ loop.index }} - {{ question.title }}</h3>
+                        
+                        {% if question.type == 's' %}
+                            <!-- Opción única (radio buttons) -->
+                            <div class="option-group">
+                                {% for option in options_by_question[question.id] %}
+                                    <div class="option-item">
+                                        <input type="radio" 
+                                            id="option_{{ option.id }}" 
+                                            name="vote_option_{{ question.id }}" 
+                                            value="{{ option.id }}"
+                                            required>
+                                        <label for="option_{{ option.id }}">{{ option.option_text }}</label>
+                                    </div>
+                                {% endfor %}
+                            </div>
+
+                        {% elif question.type == 'm' %}
+                            <!-- Opción múltiple (checkboxes) -->
+                            <div class="option-group">
+                                {% for option in options_by_question[question.id] %}
+                                    <div class="option-item">
+                                        <input type="checkbox" 
+                                            id="option_{{ option.id }}" 
+                                            name="vote_option_{{ question.id }}" 
+                                            value="{{ option.id }}">
+                                        <label for="option_{{ option.id }}">{{ option.option_text }}</label>
+                                    </div>
+                                {% endfor %}
+                            </div>
+
+                        {% elif question.type == 't' %}
+                            <!-- Respuesta de texto abierto -->
+                            <div class="option-group">
+                                <textarea name="vote_option_{{ question.id }}" 
+                                    placeholder="Escribe tu respuesta..."
+                                    required></textarea>
+                            </div>
+
+                        {% elif question.type == 'n' %}
+                            <!-- Respuesta numérica -->
+                            <div class="option-group">
+                                <input type="number" 
+                                    name="vote_option_{{ question.id }}" 
+                                    placeholder="Ingresa un número..."
+                                    required>
+                            </div>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+
+                <!-- Botones de acción -->
+                <div class="button-group">
+                    <button type="submit" name="vote_option" value="vote" class="primary">
+                        ✓ Enviar Respuestas
+                    </button>
+                    <button type="submit" name="cancel" value="cancel" class="secondary">
+                        Cancelar y Volver
+                    </button>
+                </div>
+            </form>
+        {% endif %}
+    </div>
+</body>
+</html>

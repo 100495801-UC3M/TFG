@@ -1,98 +1,115 @@
 <!DOCTYPE html>
-<html lang="es-es">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bienvenid@</title>
-    <link rel="stylesheet" href="../static/css/styles.css">
-    <link rel="stylesheet" href="../static/css/interface.css">
-    <script src="../static/js/scripts.js"></script>
+    <title>Inicio - AGULE</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/interface.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/surveys.css') }}">
+    <script src="{{ url_for('static', filename='js/scripts.js') }}"></script>
 </head>
 <body>
-    <div class="top">
-        <!-- Si eres admin mosrtrar botón para ver la lista de usuarios -->
-        {% if role == "admin" %}
-            <button type="button" onclick="redirect('/users')">Usuarios</button>
-            <button type="button" onclick="redirect('/messages')">Mensajes</button>
+    <div class="container">
+        <!-- Header con usuario y botones principales -->
+        <div class="header">
+            <div>
+                <h1>Bienvenido, {{ username }}</h1>
+                {% if role == "admin" %}<span style="color: #dc3545; font-weight: bold;">● Admin</span>{% endif %}
+            </div>
+            <div class="header-buttons">
+                {% if role == "admin" %}
+                    <button onclick="window.location.href='/users'" class="secondary">Usuarios</button>
+                {% endif %}
+                <button onclick="window.location.href='/profile'" class="secondary">Perfil</button>
+                <form action="/logout" method="POST" style="display: inline;">
+                    <button type="submit" class="secondary">Cerrar sesión</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Mensaje de información -->
+        {% if message %}
+            <div style="background: #fff3cd; border: 1px solid #ffc107; padding: 15px; border-radius: 8px; margin-bottom: 20px; color: #856404;">
+                {{ message }}
+            </div>
         {% endif %}
 
-        <button type="button" onclick="redirect('/profile')">Perfil</button>
-
-        <form action="/logout" method="POST">
-            <button type="submit" id="logout">Cerrar sesión</button>
-        </form>
-
-        <div class="search">
+        <!-- Buscar usuario -->
+        <div class="search-section">
             <form method="POST">
-                <input type="text" id="user_searched" name="user_searched" required>
+                <input type="text" name="user_searched" placeholder="Buscar usuario..." required>
                 <button type="submit" name="search_form">Buscar</button>
             </form>
-    
-            <!-- Mensaje de error si hay -->
-            {% if error %}
-                <p style="color:red;">{{ error }}</p>
+        </div>
+
+        <!-- Encuestas del usuario actual -->
+        <div class="survey-section">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h2>Mis Encuestas</h2>
+                <button onclick="window.location.href='/create_survey'">+ Crear Nueva Encuesta</button>
+            </div>
+
+            {% if user_surveys %}
+                <div class="survey-grid">
+                    {% for survey in user_surveys %}
+                        <div class="survey-card">
+                            <h3>{{ survey.title }}</h3>
+                            <p class="description">{{ survey.description }}</p>
+                            <p><small>Creada: {{ survey.created_at }}</small></p>
+                            <div class="button-group">
+                                <button onclick="window.location.href='/edit_survey/{{ survey.id }}'">Editar</button>
+                                <form method="POST" style="display: inline;">
+                                    <input type="hidden" name="survey_id" value="{{ survey.id }}">
+                                    <button type="submit" name="delete_survey" class="secondary" onclick="return confirm('¿Eliminar esta encuesta?');">Eliminar</button>
+                                </form>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="no-surveys">
+                    <p>No has creado ninguna encuesta todavía.</p>
+                </div>
             {% endif %}
         </div>
-    </div>
-    <br><hr>
-    <div class="bottom">
-        <div class="list">
-            <h3>Encuestas:</h3>
-            {% for message in list_conversations %}
-                {% if username != message[0] %}
-                    <div>
-                        <form method="POST" class="person">
-                            <input type="hidden" id="user_searched" name="user_searched" value="{{ message[0] }}">
-                            <button type="submit" name="search_form">
-                                <p class="nombre">
-                                    {{ message[0] }}
-                                </p>
-                                <p style="overflow: hidden; text-align: left;">
-                                    {{ message[1] }}
-                                </p>
-                            </button>
-                        </form>
+
+        <!-- Encuestas públicas del usuario buscado -->
+        {% if found and user_searched %}
+            <div class="survey-section">
+                <h2>Encuestas públicas de {{ user_searched }}</h2>
+
+                {% if found_surveys %}
+                    <div class="survey-grid">
+                        {% for survey in found_surveys %}
+                            <div class="survey-card">
+                                <div style="display: flex; justify-content: space-between; align-items: start;">
+                                    <div style="flex-grow: 1;">
+                                        <h3>{{ survey.title }}</h3>
+                                        <p class="description">{{ survey.description }}</p>
+                                        <p><small>Creada: {{ survey.created_at }}</small></p>
+                                    </div>
+                                    {% if survey.id in voted_ids %}
+                                        <span class="voted-badge">✓ Votado</span>
+                                    {% endif %}
+                                </div>
+                                <div class="button-group">
+                                    {% if survey.id not in voted_ids %}
+                                        <button onclick="window.location.href='/vote_survey/{{ survey.id }}'">Votar</button>
+                                    {% else %}
+                                        <button disabled style="background-color: #ccc; cursor: not-allowed;">Ya votaste</button>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% endfor %}
                     </div>
                 {% else %}
-                    <div>
-                        <form method="POST" class="person">
-                            <input type="hidden" id="user_searched" name="user_searched" value="{{ message[0] }}">
-                            <button type="submit" name="search_form">
-                                <p class="nombre">
-                                    Yo ({{ message[0] }})
-                                </p>
-                                <p style="overflow: hidden; text-align: left;">
-                                    {{ message[1] }}
-                                </p>
-                            </button>
-                        </form>
+                    <div class="no-surveys">
+                        <p>No hay encuestas disponibles.</p>
                     </div>
                 {% endif %}
-            {% endfor %}
-        </div>
-        <div class="messages">
-            <!-- Mostrar mensajes y opción de enviar si se ha encontrado al usuario -->
-            {% if found %}
-                <h4>Conversación con: {{ user_searched }}</h4>
-                {% for message in conversations %}
-                    {% if username == message[1] %}
-                        <div class="message_container" id="sender">
-                            <p class="message">{{ message[2] }} - {{ message[3] }}</p>
-                        </div>
-                    {% else %}
-                        <div class="message_container" id="receiver">
-                            <p class="message">{{ message[2] }} - {{ message[3] }}</p>
-                        </div>
-                    {% endif %}
-                {% endfor %}
-                <form method="POST" class="send">
-                    <input type="text" id="message" name="message" required autofocus>
-                    <button type="submit" name="send_message">Enviar</button>
-                </form>
-            {% else %}
-                <p>No hay mensajes disponibles. Busca un usuario.</p>
-            {% endif %}
-        </div>
+            </div>
+        {% endif %}
     </div>
 </body>
 </html>
