@@ -6,10 +6,10 @@
     <title>Votar en Encuesta - AGULE</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/surveys.css') }}">
+    <script src="{{ url_for('static', filename='js/scripts.js') }}"></script>
 </head>
 <body>
     <div class="container">
-        <!-- Encabezado de la encuesta -->
         <div class="survey-info">
             <h1>{{ survey.title }}</h1>
             <p>{{ survey.description }}</p>
@@ -18,7 +18,6 @@
             {% endif %}
         </div>
 
-        <!-- Mensaje si ya ha votado -->
         {% if already_voted %}
             <div class="voted-message">
                 ✓ Ya has votado en esta encuesta. No puedes modificar tu respuesta.
@@ -31,35 +30,45 @@
                 </form>
             </div>
         {% else %}
-            <!-- Formulario de votación -->
             <form method="POST">
                 {% for question in questions %}
                     <div class="question-section">
-                        <h3>#{{ loop.index }} - {{ question.title }}</h3>
-                        
+
+                        <div class="question-header">
+                            <h3>#{{ loop.index }} — {{ question.title }}</h3>
+                            {% if question.is_demographic %}
+                                <span class="badge-demo">👥 Demográfica</span>
+                            {% endif %}
+                            {% if question.is_required %}
+                                <span class="badge-required">* Obligatoria</span>
+                            {% else %}
+                                <span class="badge-optional">Opcional</span>
+                            {% endif %}
+                        </div>
+
+                        {% set is_req = question.is_required %}
+
                         {% if question.type == 's' %}
-                            <!-- Opción única (radio buttons) -->
                             <div class="option-group">
                                 {% for option in options_by_question[question.id] %}
                                     <div class="option-item">
-                                        <input type="radio" 
-                                            id="option_{{ option.id }}" 
-                                            name="vote_option_{{ question.id }}" 
+                                        <input type="radio"
+                                            id="option_{{ option.id }}"
+                                            name="vote_option_{{ question.id }}"
                                             value="{{ option.id }}"
-                                            required>
+                                            {% if is_req %}required{% endif %}>
                                         <label for="option_{{ option.id }}">{{ option.option_text }}</label>
                                     </div>
                                 {% endfor %}
                             </div>
 
                         {% elif question.type == 'm' %}
-                            <!-- Opción múltiple (checkboxes) -->
                             <div class="option-group">
                                 {% for option in options_by_question[question.id] %}
                                     <div class="option-item">
-                                        <input type="checkbox" 
-                                            id="option_{{ option.id }}" 
-                                            name="vote_option_{{ question.id }}" 
+                                        <input type="checkbox"
+                                            id="option_{{ option.id }}"
+                                            name="vote_option_{{ question.id }}"
                                             value="{{ option.id }}">
                                         <label for="option_{{ option.id }}">{{ option.option_text }}</label>
                                     </div>
@@ -67,31 +76,30 @@
                             </div>
 
                         {% elif question.type == 't' %}
-                            <!-- Respuesta de texto abierto -->
-                            <div class="option-group">
-                                <textarea name="vote_option_{{ question.id }}" 
+                            <div class="input-center">
+                                <textarea name="vote_option_{{ question.id }}"
                                     placeholder="Escribe tu respuesta..."
-                                    required></textarea>
+                                    {% if is_req %}required{% endif %}></textarea>
                             </div>
 
                         {% elif question.type == 'n' %}
-                            <!-- Respuesta numérica -->
-                            <div class="option-group">
-                                <input type="number" 
-                                    name="vote_option_{{ question.id }}" 
+                            <div class="input-center">
+                                <input type="number"
+                                    name="vote_option_{{ question.id }}"
                                     placeholder="Ingresa un número..."
-                                    required>
+                                    {% if is_req %}required{% endif %}>
                             </div>
                         {% endif %}
+
                     </div>
                 {% endfor %}
 
-                <!-- Botones de acción -->
                 <div class="button-group">
                     <button type="submit" name="vote_option" value="vote" class="primary">
                         ✓ Enviar Respuestas
                     </button>
-                    <button type="submit" name="cancel" value="cancel" class="secondary">
+                    <button type="button" class="secondary"
+                            onclick="window.location.href='/home'">
                         Cancelar y Volver
                     </button>
                 </div>

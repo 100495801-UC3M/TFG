@@ -6,6 +6,7 @@
     <title>Editar Encuesta - AGULE</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/surveys.css') }}">
+    <script src="{{ url_for('static', filename='js/scripts.js') }}"></script>
 </head>
 <body>
     <div class="container">
@@ -39,8 +40,16 @@
                 <input type="datetime-local" id="end_at" name="end_at" value="{{ survey.end_at }}">
             </div>
 
+            <div class="form-group">
+                <label for="is_public">Visibilidad</label>
+                <select id="is_public" name="is_public">
+                    <option value="y" {% if survey.is_public == 'y' %}selected{% endif %}>Pública</option>
+                    <option value="n" {% if survey.is_public == 'n' %}selected{% endif %}>Privada</option>
+                </select>
+            </div>
+
             <button type="submit" name="edit_survey" value="edit_survey" class="primary">
-                Actualizar Fechas
+                Actualizar fechas o si es público
             </button>
         </form>
 
@@ -193,158 +202,5 @@
             </form>
         </div>
     </div>
-
-    <script>
-        function toggleOptions() {
-            const type = document.getElementById('question_type').value;
-            const optionsGroup = document.getElementById('options-group');
-            optionsGroup.style.display = (type === 's' || type === 'm') ? 'block' : 'none';
-        }
-
-        function addOption() {
-            const container = document.getElementById('options-container');
-            const optionCount = container.children.length + 1;
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.name = 'options[]';
-            input.className = 'option-input';
-            input.placeholder = `Opción ${optionCount}`;
-            container.appendChild(input);
-        }
-
-        function toggleEditQuestion(questionId) {
-            const editForm = document.getElementById(`edit-form-${questionId}`);
-            if (editForm.style.display === 'none') {
-                editForm.style.display = 'block';
-                editForm.classList.add('show');
-            } else {
-                editForm.style.display = 'none';
-                editForm.classList.remove('show');
-            }
-        }
-
-        function toggleEditOptions(questionId) {
-            const type = document.getElementById(`edit-type-${questionId}`).value;
-            const optionsGroup = document.getElementById(`edit-options-group-${questionId}`);
-            optionsGroup.style.display = (type === 's' || type === 'm') ? 'block' : 'none';
-        }
-
-        function addEditOption(questionId) {
-            const container = document.getElementById(`edit-options-container-${questionId}`);
-            const optionCount = container.children.length + 1;
-            const div = document.createElement('div');
-            div.style.display = 'flex';
-            div.style.gap = '8px';
-            div.style.marginBottom = '8px';
-            
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.name = 'edit_options[]';
-            input.className = 'option-input';
-            input.placeholder = `Opción ${optionCount}`;
-            input.style.flexGrow = '1';
-            
-            const hiddenInput = document.createElement('input');
-            hiddenInput.type = 'hidden';
-            hiddenInput.name = 'edit_option_ids[]';
-            hiddenInput.value = '';
-            
-            const button = document.createElement('button');
-            button.type = 'button';
-            button.className = 'secondary';
-            button.textContent = '✕';
-            button.style.width = 'auto';
-            button.onclick = function() { removeEditOption(this); };
-            
-            div.appendChild(input);
-            div.appendChild(hiddenInput);
-            div.appendChild(button);
-            container.appendChild(div);
-        }
-
-        function removeEditOption(button) {
-            button.parentElement.remove();
-        }
-
-        function validateQuestionTitle() {
-            const title = document.getElementById('question_title').value.trim();
-            if (!title) {
-                alert('El título de la pregunta es obligatorio.');
-                return false;
-            }
-            return true;
-        }
-
-        // Drag and Drop para reordenar preguntas
-        let draggedElement = null;
-
-        document.addEventListener('dragstart', function(e) {
-            if (e.target.classList.contains('question-item')) {
-                draggedElement = e.target;
-                e.target.style.opacity = '0.5';
-                e.dataTransfer.effectAllowed = 'move';
-            }
-        });
-
-        document.addEventListener('dragover', function(e) {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-            
-            const afterElement = getDragAfterElement(e.clientY);
-            const container = document.getElementById('questions-container');
-            
-            if (afterElement == null) {
-                container.appendChild(draggedElement);
-            } else {
-                container.insertBefore(draggedElement, afterElement);
-            }
-        });
-
-        document.addEventListener('dragend', function(e) {
-            if (e.target.classList.contains('question-item')) {
-                e.target.style.opacity = '1';
-                draggedElement = null;
-                saveQuestionOrder();
-            }
-        });
-
-        function getDragAfterElement(y) {
-            const draggableElements = Array.from(document.querySelectorAll('.question-item:not([style*="opacity"])'));
-            
-            return draggableElements.reduce((closest, child) => {
-                const box = child.getBoundingClientRect();
-                const offset = y - box.top - box.height / 2;
-                
-                if (offset < 0 && offset > closest.offset) {
-                    return { offset: offset, element: child };
-                } else {
-                    return closest;
-                }
-            }, { offset: Number.NEGATIVE_INFINITY }).element;
-        }
-
-        function saveQuestionOrder() {
-            const container = document.getElementById('questions-container');
-            const questionIds = Array.from(container.querySelectorAll('.question-item')).map(el => el.getAttribute('data-question-id'));
-            
-            if (questionIds.length === 0) return;
-            
-            // Enviar nuevo orden al servidor
-            const form = document.createElement('form');
-            form.method = 'POST';
-            form.innerHTML = `
-                <input type="hidden" name="reorder_questions" value="true">
-                <input type="hidden" name="question_order" value="${questionIds.join(',')}">
-            `;
-            document.body.appendChild(form);
-            form.submit();
-            document.body.removeChild(form);
-        }
-
-        // Inicializar
-        document.addEventListener('DOMContentLoaded', function() {
-            toggleOptions();
-        });
-    </script>
 </body>
 </html>

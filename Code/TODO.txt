@@ -7,5 +7,11 @@
     4. Recibir la lista de respuestas y colocarlas en el servidor de nuevo. Returnear True si funcionó, False si no.
     5. Si false, decir "ha habido un error, espera un segundo".
 
-2. Si buscas un usuario que no tiene encuestas, te notifica de eso. (SI no existe te lo dice)
-3. Crear hash survey id para 
+2. Al seleccionar privada, que den dos opciones. O añadir una whitelist de personas que pueden acceder o un codigo
+con el que buscar en el buscador y poder acceder a dicha encuesta
+3. Que en el home se puedan ver las estadísticas de las encuestas, de momento que solo sea un botón.
+Además, las estadísticas públicas deben tener este botón.
+4. Que al buscar una encuesta, si se ha acabado, que solo se pueda acceder a las estadísticas.
+Es decir, la encuesta debe aparecer pero no se puede votar.
+5. Que aparezca un listado de encuestas en las que eres admin debajo de mis encuestas
+6. Que, al crear o editar una encuesta, se puedan añadir o quitar admins.

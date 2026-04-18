@@ -43,6 +43,7 @@ class Survey:
                 title                   TEXT NOT NULL,
                 type                    CHAR(1) DEFAULT 't' CHECK(type IN ('t', 'n', 's', 'm')),
                 position                INT DEFAULT 0,
+                is_required             BOOL DEFAULT 1,
                 FOREIGN KEY (survey_id) REFERENCES survey(id) ON DELETE CASCADE);
                                   
             CREATE TABLE IF NOT EXISTS question_option (
@@ -98,9 +99,10 @@ class Survey:
     def get_survey(self, survey_id):
         return self.cursor.execute("SELECT * FROM survey WHERE id = ?", (survey_id,)).fetchone()
 
-    def modify_dates(self, survey_id, start, end):
-        self.cursor.execute("UPDATE survey SET start_at=?, end_at=?, last_modified=? WHERE id = ?",
-            (start, end, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), survey_id))
+    def modify_survey(self, survey_id, start, end, is_public):
+        self.cursor.execute(
+            "UPDATE survey SET start_at=?, end_at=?, is_public=?, last_modified=? WHERE id=?",
+            (start, end, is_public, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), survey_id))
         self.connection.commit()
 
 
@@ -137,6 +139,12 @@ class Survey:
     def delete_survey(self, survey_id):
         self.cursor.execute("DELETE FROM survey WHERE id = ?", (survey_id,))
         self.connection.commit()
+    
+    # Función para cambiar la base de datos, no debe ser ejecutado en main
+    def changes_to_database(self, command):
+        self.cursor.execute(command)
+        self.connection.commit()
+        print("OK")
         
 
 
@@ -213,15 +221,20 @@ class Questions:
         self.connection.row_factory = sqlite3.Row
         self.cursor = self.connection.cursor()
     
-    def add_question(self, survey_id, is_demographic, title, type):
+    def add_question(self, survey_id, is_demographic, title, type, is_required=True):
         try:
+            # Obtener la posición máxima actual
+            max_pos = self.cursor.execute(
+                "SELECT COALESCE(MAX(position), 0) FROM question WHERE survey_id = ?",
+                (survey_id,)).fetchone()[0]
+            
             self.cursor.execute(
-                "INSERT INTO question (survey_id, is_demographic, title, type) VALUES (?, ?, ?, ?)",
-                (survey_id, is_demographic, title, type))
+                "INSERT INTO question (survey_id, is_demographic, title, type, is_required, position) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (survey_id, is_demographic, title, type, is_required, max_pos + 1))
             self.connection.commit()
-            self.reorder_positions(survey_id)
             return self.cursor.lastrowid
-        except sqlite3.IntegrityError:
+        except Exception:
             return False
         
     def remove_question(self, question_id):
@@ -268,16 +281,13 @@ class Questions:
         else:
             return self.cursor.execute("SELECT * FROM question WHERE survey_id = ? ORDER BY position",(survey_id,)).fetchall()
     
-    def update_question(self, question_id, title, type, is_demographic=None):
-        if is_demographic is not None:
-            self.cursor.execute("UPDATE question SET title = ?, type = ?, is_demographic = ? WHERE id = ?",
-                (title, type, is_demographic, question_id))
-        else:
-            self.cursor.execute("UPDATE question SET title = ?, type = ? WHERE id = ?",
-                (title, type, question_id))
+    def update_question(self, question_id, title, type, is_demographic, is_required):
+        self.cursor.execute(
+            "UPDATE question SET title=?, type=?, is_demographic=?, is_required=? WHERE id=?",
+            (title, type, int(is_demographic), int(is_required), question_id))
         self.connection.commit()
         return True
-    
+        
     def update_question_position(self, question_id, position):
         """Actualiza la posición de una pregunta."""
         self.cursor.execute("UPDATE question SET position = ? WHERE id = ?",
@@ -295,11 +305,13 @@ class QuestionOptions:
 
     def add_option(self, question_id, option_text):
         try:
+            max_pos = self.cursor.execute(
+                "SELECT COALESCE(MAX(position), 0) FROM question_option WHERE question_id = ?",
+                (question_id,)).fetchone()[0]
             self.cursor.execute(
-                "INSERT INTO question_option (question_id, option_text) VALUES (?, ?)",
-                (question_id, option_text))
+                "INSERT INTO question_option (question_id, option_text, position) VALUES (?, ?, ?)",
+                (question_id, option_text, max_pos + 1))
             self.connection.commit()
-            self.reorder_positions(question_id)
             return True
         except sqlite3.IntegrityError:
             return False
@@ -454,3 +466,9 @@ class Statistics:
         stat_types = ["sum", "average"]
         for type in stat_types:
             self.add_value(survey_id, demographic_group, type)
+
+
+
+if __name__ == "__main__":
+    survey_db = Survey()
+    survey_db.changes_to_database("ALTER TABLE question ADD COLUMN is_required BOOL DEFAULT 1;")

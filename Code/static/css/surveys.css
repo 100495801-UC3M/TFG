@@ -76,7 +76,7 @@ button:disabled {
     cursor: not-allowed;
 }
 
-/* Estilos de mensajes */
+/* ── Mensajes ── */
 .error {
     background-color: #f8d7da;
     border: 1px solid #f5c6cb;
@@ -106,7 +106,7 @@ button:disabled {
     margin-bottom: 20px;
 }
 
-/* Estilos de encuestas */
+/* ── Info de encuesta ── */
 .survey-info {
     background-color: #e7f3ff;
     border-left: 4px solid #007bff;
@@ -124,6 +124,7 @@ button:disabled {
     color: #666;
 }
 
+/* ── Grid de tarjetas ── */
 .survey-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -155,7 +156,7 @@ button:disabled {
     min-height: 40px;
 }
 
-/* Estilos de preguntas */
+/* ── Preguntas ── */
 .question-list {
     margin-top: 30px;
 }
@@ -172,6 +173,20 @@ button:disabled {
     margin-top: 0;
 }
 
+/* Cabecera de pregunta: título + badges en línea */
+.question-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+}
+
+.question-header h3 {
+    margin: 0;
+    font-size: 1rem;
+}
+
 .question-item {
     background-color: #f8f9fa;
     padding: 15px;
@@ -184,25 +199,91 @@ button:disabled {
     margin-top: 0;
 }
 
-/* Opciones de preguntas */
+/* Badges en la lista de preguntas (create/edit) */
+.question-badges {
+    display: flex;
+    gap: 6px;
+    margin-top: 4px;
+    flex-wrap: wrap;
+}
+
+/* ── Badges ── */
+.badge-demo {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #e8f5e9;
+    color: #2e7d32;
+    border: 1px solid #a5d6a7;
+    border-radius: 20px;
+    padding: 2px 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.badge-required {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #fff3e0;
+    color: #e65100;
+    border: 1px solid #ffcc80;
+    border-radius: 20px;
+    padding: 2px 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.badge-optional {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #f3f3f3;
+    color: #666;
+    border: 1px solid #ddd;
+    border-radius: 20px;
+    padding: 2px 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+/* ── Opciones de preguntas ── */
 .option-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
     margin-top: 15px;
 }
 
 .option-item {
-    margin-bottom: 10px;
-    padding: 10px;
-    background-color: white;
-    border: 1px solid #dee2e6;
-    border-radius: 4px;
     display: flex;
     align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background-color: white;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.option-item:hover {
+    border-color: #007bff;
+    background: #f0f7ff;
 }
 
 .option-item input[type="radio"],
 .option-item input[type="checkbox"] {
-    margin-right: 10px;
+    width: 18px;
+    height: 18px;
+    margin: 0;
     cursor: pointer;
+    flex-shrink: 0;
 }
 
 .option-item label {
@@ -210,11 +291,44 @@ button:disabled {
     cursor: pointer;
     flex-grow: 1;
     font-weight: normal;
-    display: flex;
-    align-items: center;
 }
 
-/* Estilos de botones de grupo */
+/* ── Inputs texto/numérico centrados (vote_survey) ── */
+.input-center {
+    display: flex;
+    justify-content: center;
+    margin-top: 10px;
+}
+
+.input-center textarea,
+.input-center input[type="number"] {
+    width: 100%;
+    max-width: 500px;
+    text-align: center;
+}
+
+.input-center textarea {
+    text-align: left;
+}
+
+/* ── Fila demográfica + obligatoria (create/edit) ── */
+.check-row {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    flex-wrap: wrap;
+}
+
+.check-row label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: normal;
+    margin: 0;
+    cursor: pointer;
+}
+
+/* ── Botones de grupo ── */
 .button-group {
     display: flex;
     gap: 8px;
@@ -222,7 +336,7 @@ button:disabled {
     flex-wrap: wrap;
 }
 
-/* Sección de edición */
+/* ── Sección de edición ── */
 .edit-section {
     display: none;
     background-color: #fff3cd;
@@ -235,21 +349,21 @@ button:disabled {
     display: block;
 }
 
-/* Botones de acción */
+/* ── Botones de acción ── */
 .action-buttons {
     margin-top: 30px;
     padding-top: 20px;
     border-top: 1px solid #ddd;
 }
 
-/* Sin encuestas */
+/* ── Sin encuestas ── */
 .no-surveys {
     text-align: center;
     padding: 40px;
     color: #999;
 }
 
-/* Insignia de votado */
+/* ── Insignia votado ── */
 .voted-badge {
     background-color: #28a745;
     color: white;
@@ -258,7 +372,7 @@ button:disabled {
     font-size: 12px;
 }
 
-/* Búsqueda */
+/* ── Búsqueda ── */
 .search-section {
     background-color: #e7f3ff;
     padding: 20px;
@@ -279,7 +393,7 @@ button:disabled {
     flex-grow: 1;
 }
 
-/* Header */
+/* ── Header ── */
 .header {
     display: flex;
     justify-content: space-between;
@@ -294,7 +408,7 @@ button:disabled {
     gap: 10px;
 }
 
-/* Sección de encuestas */
+/* ── Sección de encuestas ── */
 .survey-section {
     margin-bottom: 40px;
 }
@@ -304,7 +418,12 @@ button:disabled {
     padding-bottom: 10px;
 }
 
-/* Pequeños estilos inline que se pueden reutilizar */
+.option-group.two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
 small {
     color: #666;
 }

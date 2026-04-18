@@ -43,38 +43,7 @@
             </form>
         </div>
 
-        <!-- Encuestas del usuario actual -->
-        <div class="survey-section">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <h2>Mis Encuestas</h2>
-                <button onclick="window.location.href='/create_survey'">+ Crear Nueva Encuesta</button>
-            </div>
-
-            {% if user_surveys %}
-                <div class="survey-grid">
-                    {% for survey in user_surveys %}
-                        <div class="survey-card">
-                            <h3>{{ survey.title }}</h3>
-                            <p class="description">{{ survey.description }}</p>
-                            <p><small>Creada: {{ survey.created_at }}</small></p>
-                            <div class="button-group">
-                                <button onclick="window.location.href='/edit_survey/{{ survey.id }}'">Editar</button>
-                                <form method="POST" style="display: inline;">
-                                    <input type="hidden" name="survey_id" value="{{ survey.id }}">
-                                    <button type="submit" name="delete_survey" class="secondary" onclick="return confirm('¿Eliminar esta encuesta?');">Eliminar</button>
-                                </form>
-                            </div>
-                        </div>
-                    {% endfor %}
-                </div>
-            {% else %}
-                <div class="no-surveys">
-                    <p>No has creado ninguna encuesta todavía.</p>
-                </div>
-            {% endif %}
-        </div>
-
-        <!-- Encuestas públicas del usuario buscado -->
+        <!-- Encuestas públicas del usuario buscado (solo si se ha buscado) -->
         {% if found and user_searched %}
             <div class="survey-section">
                 <h2>Encuestas públicas de {{ user_searched }}</h2>
@@ -95,7 +64,7 @@
                                 </div>
                                 <div class="button-group">
                                     {% if survey.id not in voted_ids %}
-                                        <button onclick="window.location.href='/vote_survey/{{ survey.id }}'">Votar</button>
+                                        <button onclick="window.location.href='/vote_survey/{{ encode_survey_id(survey.id) }}'">Votar</button>
                                     {% else %}
                                         <button disabled style="background-color: #ccc; cursor: not-allowed;">Ya votaste</button>
                                     {% endif %}
@@ -110,6 +79,37 @@
                 {% endif %}
             </div>
         {% endif %}
+
+        <!-- Mis encuestas (siempre visible) -->
+        <div class="survey-section">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h2>Mis Encuestas</h2>
+                <button onclick="window.location.href='/create_survey'">+ Crear Nueva Encuesta</button>
+            </div>
+
+            {% if user_surveys %}
+                <div class="survey-grid">
+                    {% for survey in user_surveys %}
+                        <div class="survey-card">
+                            <h3>{{ survey.title }}</h3>
+                            <p class="description">{{ survey.description }}</p>
+                            <p><small>Creada: {{ survey.created_at }}</small></p>
+                            <div class="button-group">
+                                <button onclick="window.location.href='/edit_survey/{{ encode_survey_id(survey.id) }}'">Editar</button>
+                                <form method="POST" style="display: inline;">
+                                    <input type="hidden" name="survey_id" value="{{ survey.id }}">
+                                    <button type="submit" name="delete_survey" class="secondary" onclick="return confirm('¿Eliminar esta encuesta?');">Eliminar</button>
+                                </form>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="no-surveys">
+                    <p>No has creado ninguna encuesta todavía.</p>
+                </div>
+            {% endif %}
+        </div>
     </div>
 </body>
 </html>

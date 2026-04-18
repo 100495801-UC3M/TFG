@@ -10,6 +10,7 @@ from email.utils import formataddr # para enviar correos
 import hmac as hmac_module
 import hashlib
 
+from itsdangerous import URLSafeSerializer  # viene con Flask, para las URL
 from app.users import Users
 from datetime import datetime
 from cryptography import x509
@@ -552,3 +553,14 @@ def generate_user_hash(survey_id, username, SECRET_KEY):
     user_hash = hmac_module.new(SECRET_KEY, value_to_hash, hashlib.sha256).hexdigest()
     logging.info(f"User hash generado para survey_id={survey_id}, username={username}")
     return user_hash
+
+def encode_survey_id(survey_id: int, secret: str) -> str:
+    s = URLSafeSerializer(secret, salt="survey-id")
+    return s.dumps(survey_id)
+
+def decode_survey_id(token: str, secret: str) -> int | None:
+    s = URLSafeSerializer(secret, salt="survey-id")
+    try:
+        return s.loads(token)
+    except Exception:
+        return None
