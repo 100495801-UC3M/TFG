@@ -9,102 +9,148 @@
     <script src="{{ url_for('static', filename='js/scripts.js') }}"></script>
 </head>
 <body>
-    <div class="container">
-        <div class="survey-info">
-            <h1>{{ survey.title }}</h1>
-            <p>{{ survey.description }}</p>
-            {% if survey.start_at %}
-                <small>Válida desde: {{ survey.start_at }}</small>
-            {% endif %}
-        </div>
+<div class="container">
 
-        {% if already_voted %}
-            <div class="voted-message">
-                ✓ Ya has votado en esta encuesta. No puedes modificar tu respuesta.
-            </div>
-            <div class="button-group">
-                <form method="POST">
-                    <button type="submit" name="cancel" value="cancel" class="secondary">
-                        Volver a Inicio
-                    </button>
-                </form>
-            </div>
-        {% else %}
-            <form method="POST">
-                {% for question in questions %}
-                    <div class="question-section">
-
-                        <div class="question-header">
-                            <h3>#{{ loop.index }} — {{ question.title }}</h3>
-                            {% if question.is_demographic %}
-                                <span class="badge-demo">👥 Demográfica</span>
-                            {% endif %}
-                            {% if question.is_required %}
-                                <span class="badge-required">* Obligatoria</span>
-                            {% else %}
-                                <span class="badge-optional">Opcional</span>
-                            {% endif %}
-                        </div>
-
-                        {% set is_req = question.is_required %}
-
-                        {% if question.type == 's' %}
-                            <div class="option-group">
-                                {% for option in options_by_question[question.id] %}
-                                    <div class="option-item">
-                                        <input type="radio"
-                                            id="option_{{ option.id }}"
-                                            name="vote_option_{{ question.id }}"
-                                            value="{{ option.id }}"
-                                            {% if is_req %}required{% endif %}>
-                                        <label for="option_{{ option.id }}">{{ option.option_text }}</label>
-                                    </div>
-                                {% endfor %}
-                            </div>
-
-                        {% elif question.type == 'm' %}
-                            <div class="option-group">
-                                {% for option in options_by_question[question.id] %}
-                                    <div class="option-item">
-                                        <input type="checkbox"
-                                            id="option_{{ option.id }}"
-                                            name="vote_option_{{ question.id }}"
-                                            value="{{ option.id }}">
-                                        <label for="option_{{ option.id }}">{{ option.option_text }}</label>
-                                    </div>
-                                {% endfor %}
-                            </div>
-
-                        {% elif question.type == 't' %}
-                            <div class="input-center">
-                                <textarea name="vote_option_{{ question.id }}"
-                                    placeholder="Escribe tu respuesta..."
-                                    {% if is_req %}required{% endif %}></textarea>
-                            </div>
-
-                        {% elif question.type == 'n' %}
-                            <div class="input-center">
-                                <input type="number"
-                                    name="vote_option_{{ question.id }}"
-                                    placeholder="Ingresa un número..."
-                                    {% if is_req %}required{% endif %}>
-                            </div>
-                        {% endif %}
-
-                    </div>
-                {% endfor %}
-
-                <div class="button-group">
-                    <button type="submit" name="vote_option" value="vote" class="primary">
-                        ✓ Enviar Respuestas
-                    </button>
-                    <button type="button" class="secondary"
-                            onclick="window.location.href='/home'">
-                        Cancelar y Volver
-                    </button>
-                </div>
-            </form>
+    <div class="survey-info">
+        <h1>{{ survey.title }}</h1>
+        <p>{{ survey.description }}</p>
+        {% if survey.start_at %}
+            <small>Válida desde: {{ survey.start_at }}</small>
+        {% endif %}
+        {% if survey.end_at %}
+            <small style="margin-left:12px;">Válida hasta: {{ survey.end_at }}</small>
         {% endif %}
     </div>
+
+    <!-- TODO 2: Acceso denegado (whitelist) -->
+    {% if access_denied %}
+        <div class="error">
+            🔒 {{ access_reason }}
+        </div>
+        <div class="button-group">
+            <form method="POST">
+                <button type="submit" name="cancel" value="cancel" class="secondary">
+                    Volver a Inicio
+                </button>
+            </form>
+        </div>
+
+    <!-- TODO 2: Formulario de código de acceso -->
+    {% elif needs_code_form %}
+        <div class="survey-info" style="border-left-color:#ffc107;background:#fff8e1;">
+            <h3>🔐 Esta encuesta es privada</h3>
+            <p>Introduce el código de acceso proporcionado por el creador.</p>
+        </div>
+
+        {% if code_error %}
+            <div class="error">{{ code_error }}</div>
+        {% endif %}
+
+        <form method="POST">
+            <div class="form-group">
+                <label for="access_code">Código de acceso</label>
+                <input type="text" id="access_code" name="access_code"
+                       placeholder="Introduce el código..." required
+                       autocomplete="off" style="letter-spacing:2px;">
+            </div>
+            <div class="button-group">
+                <button type="submit" name="enter_code" value="1" class="primary">
+                    Acceder
+                </button>
+                <button type="submit" name="cancel" value="cancel" class="secondary">
+                    Cancelar
+                </button>
+            </div>
+        </form>
+
+    {% elif already_voted %}
+        <div class="voted-message">
+            ✓ Ya has votado en esta encuesta. No puedes modificar tu respuesta.
+        </div>
+        <div class="button-group">
+            <form method="POST">
+                <button type="submit" name="cancel" value="cancel" class="secondary">
+                    Volver a Inicio
+                </button>
+            </form>
+        </div>
+
+    {% else %}
+        <form method="POST">
+            {% for question in questions %}
+                <div class="question-section">
+                    <div class="question-header">
+                        <h3>#{{ loop.index }} — {{ question.title }}</h3>
+                        {% if question.is_demographic %}
+                            <span class="badge-demo">👥 Demográfica</span>
+                        {% endif %}
+                        {% if question.is_required %}
+                            <span class="badge-required">* Obligatoria</span>
+                        {% else %}
+                            <span class="badge-optional">Opcional</span>
+                        {% endif %}
+                    </div>
+
+                    {% set is_req = question.is_required %}
+
+                    {% if question.type == 's' %}
+                        <div class="option-group">
+                            {% for option in options_by_question[question.id] %}
+                                <div class="option-item">
+                                    <input type="radio"
+                                           id="option_{{ option.id }}"
+                                           name="vote_option_{{ question.id }}"
+                                           value="{{ option.id }}"
+                                           {% if is_req %}required{% endif %}>
+                                    <label for="option_{{ option.id }}">{{ option.option_text }}</label>
+                                </div>
+                            {% endfor %}
+                        </div>
+
+                    {% elif question.type == 'm' %}
+                        <div class="option-group">
+                            {% for option in options_by_question[question.id] %}
+                                <div class="option-item">
+                                    <input type="checkbox"
+                                           id="option_{{ option.id }}"
+                                           name="vote_option_{{ question.id }}"
+                                           value="{{ option.id }}">
+                                    <label for="option_{{ option.id }}">{{ option.option_text }}</label>
+                                </div>
+                            {% endfor %}
+                        </div>
+
+                    {% elif question.type == 't' %}
+                        <div class="input-center">
+                            <textarea name="vote_option_{{ question.id }}"
+                                      placeholder="Escribe tu respuesta..."
+                                      {% if is_req %}required{% endif %}></textarea>
+                        </div>
+
+                    {% elif question.type == 'n' %}
+                        <div class="input-center">
+                            <input type="number"
+                                   name="vote_option_{{ question.id }}"
+                                   placeholder="Ingresa un número..."
+                                   {% if is_req %}required{% endif %}>
+                        </div>
+                    {% endif %}
+
+                </div>
+            {% endfor %}
+
+            <div class="button-group">
+                <button type="submit" name="vote_option" value="vote" class="primary">
+                    ✓ Enviar Respuestas
+                </button>
+                <button type="button" class="secondary"
+                        onclick="window.location.href='/home'">
+                    Cancelar y Volver
+                </button>
+            </div>
+        </form>
+    {% endif %}
+
+</div>
 </body>
 </html>

@@ -1,4 +1,5 @@
 import sqlite3
+import secrets
 from datetime import datetime
 
 class Survey:
@@ -7,6 +8,7 @@ class Survey:
         self.connection.row_factory = sqlite3.Row
         self.cursor = self.connection.cursor()
         self.create_tables()
+        self._migrate()
 
     def create_tables(self):
         self.cursor.executescript('''
@@ -16,6 +18,8 @@ class Survey:
                 title                   VARCHAR(200) NOT NULL,
                 description             TEXT,
                 is_public               CHAR(1) DEFAULT 'y' CHECK(is_public IN ('y','n')),
+                privacy_mode            TEXT DEFAULT 'public',
+                access_code             TEXT,
                 start_at                TEXT,
                 end_at                  TEXT,
                 created_at              TEXT NOT NULL,
@@ -83,14 +87,30 @@ class Survey:
                 FOREIGN KEY (survey_id) REFERENCES survey(id) ON DELETE CASCADE);
         ''')
         self.connection.commit()
-    
-    def add_survey(self, creator_id, title, description, start_at, end_at, is_public='y'):
+
+    def _migrate(self):
+        """Añade columnas nuevas si no existen (migración segura)."""
+        migrations = [
+            "ALTER TABLE survey ADD COLUMN privacy_mode TEXT DEFAULT 'public'",
+            "ALTER TABLE survey ADD COLUMN access_code TEXT",
+        ]
+        for sql in migrations:
+            try:
+                self.cursor.execute(sql)
+                self.connection.commit()
+            except Exception:
+                pass  # La columna ya existe
+
+    def add_survey(self, creator_id, title, description, start_at, end_at,
+                   is_public='y', privacy_mode='public', access_code=None):
         try:
             now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             self.cursor.execute(
-                "INSERT INTO survey (creator_id, title, description, is_public, start_at, end_at, created_at, last_modified) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (creator_id, title, description, is_public, start_at, end_at, now, now))
+                "INSERT INTO survey (creator_id, title, description, is_public, privacy_mode, "
+                "access_code, start_at, end_at, created_at, last_modified) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (creator_id, title, description, is_public, privacy_mode,
+                 access_code, start_at, end_at, now, now))
             self.connection.commit()
             return self.cursor.lastrowid
         except sqlite3.IntegrityError:
@@ -99,12 +119,35 @@ class Survey:
     def get_survey(self, survey_id):
         return self.cursor.execute("SELECT * FROM survey WHERE id = ?", (survey_id,)).fetchone()
 
-    def modify_survey(self, survey_id, start, end, is_public):
-        self.cursor.execute(
-            "UPDATE survey SET start_at=?, end_at=?, is_public=?, last_modified=? WHERE id=?",
-            (start, end, is_public, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), survey_id))
+    def get_survey_by_code(self, access_code):
+        """Busca una encuesta por su código de acceso."""
+        return self.cursor.execute(
+            "SELECT * FROM survey WHERE access_code = ?", (access_code,)).fetchone()
+
+    def modify_survey(self, survey_id, start, end, is_public,
+                      privacy_mode=None, access_code=None):
+        if privacy_mode is not None:
+            self.cursor.execute(
+                "UPDATE survey SET start_at=?, end_at=?, is_public=?, privacy_mode=?, "
+                "access_code=?, last_modified=? WHERE id=?",
+                (start, end, is_public, privacy_mode, access_code,
+                 datetime.now().strftime("%Y-%m-%d %H:%M:%S"), survey_id))
+        else:
+            self.cursor.execute(
+                "UPDATE survey SET start_at=?, end_at=?, is_public=?, last_modified=? WHERE id=?",
+                (start, end, is_public,
+                 datetime.now().strftime("%Y-%m-%d %H:%M:%S"), survey_id))
         self.connection.commit()
 
+    def is_ended(self, survey):
+        """Devuelve True si la encuesta ha finalizado."""
+        if not survey["end_at"]:
+            return False
+        try:
+            end = datetime.fromisoformat(survey["end_at"])
+            return datetime.now() > end
+        except Exception:
+            return False
 
     # PARA ADMIN
     def list_surveys(self):
@@ -120,17 +163,23 @@ class Survey:
             WHERE survey_admin.user_id = ?""", (user_id,)).fetchall()
     
     def get_user_surveys(self, username):
-        """Obtiene todas las encuestas creadas por un usuario."""
-        return self.cursor.execute("SELECT * FROM survey WHERE creator_id = ?", (username,)).fetchall()
+        return self.cursor.execute(
+            "SELECT * FROM survey WHERE creator_id = ?", (username,)).fetchall()
     
     def get_public_surveys(self, username):
-        """Obtiene todas las encuestas públicas creadas por un usuario específico."""
         return self.cursor.execute(
-            "SELECT * FROM survey WHERE creator_id = ? AND is_public = 'y'", 
+            "SELECT * FROM survey WHERE creator_id = ? AND is_public = 'y'",
             (username,)).fetchall()
-    
+
+    def get_surveys_as_admin(self, username):
+        """Encuestas en las que el usuario es admin (pero no el creador)."""
+        return self.cursor.execute("""
+            SELECT survey.* FROM survey
+            JOIN survey_admin ON survey.id = survey_admin.survey_id
+            WHERE survey_admin.user_id = ? AND survey.creator_id != ?
+        """, (username, username)).fetchall()
+
     def has_voted(self, survey_id, user_hash):
-        """Verifica si un usuario ya ha votado en una encuesta."""
         result = self.cursor.execute(
             "SELECT 1 FROM submitted_answer WHERE survey_id = ? AND user_hash = ?",
             (survey_id, user_hash)).fetchone()
@@ -139,13 +188,64 @@ class Survey:
     def delete_survey(self, survey_id):
         self.cursor.execute("DELETE FROM survey WHERE id = ?", (survey_id,))
         self.connection.commit()
-    
-    # Función para cambiar la base de datos, no debe ser ejecutado en main
+
+    # ── Estadísticas Python (sin SEAL) ────────────────────────────────────────
+
+    def get_vote_count(self, survey_id):
+        """Total de respuestas enviadas a la encuesta."""
+        row = self.cursor.execute(
+            "SELECT COUNT(*) FROM submitted_answer WHERE survey_id = ?",
+            (survey_id,)).fetchone()
+        return row[0] if row else 0
+
+    def get_option_counts(self, survey_id):
+        """Para preguntas de opción: {option_id: count}."""
+        rows = self.cursor.execute("""
+            SELECT a.option_id, COUNT(*) as cnt
+            FROM answer a
+            JOIN submitted_answer sa ON a.submitted_answer_id = sa.id
+            WHERE sa.survey_id = ? AND a.option_id IS NOT NULL
+            GROUP BY a.option_id
+        """, (survey_id,)).fetchall()
+        return {row["option_id"]: row["cnt"] for row in rows}
+
+    def get_numeric_stats(self, survey_id, question_id):
+        """Para preguntas numéricas: {sum, average, count}."""
+        rows = self.cursor.execute("""
+            SELECT a.answer
+            FROM answer a
+            JOIN submitted_answer sa ON a.submitted_answer_id = sa.id
+            WHERE sa.survey_id = ? AND a.question_id = ? AND a.answer IS NOT NULL
+        """, (survey_id, question_id)).fetchall()
+        values = []
+        for r in rows:
+            try:
+                values.append(float(r["answer"]))
+            except Exception:
+                pass
+        if not values:
+            return {"sum": 0, "average": 0, "count": 0}
+        return {
+            "sum": sum(values),
+            "average": sum(values) / len(values),
+            "count": len(values)
+        }
+
+    def get_text_answers(self, survey_id, question_id):
+        """Para preguntas de texto: lista de respuestas."""
+        rows = self.cursor.execute("""
+            SELECT a.answer
+            FROM answer a
+            JOIN submitted_answer sa ON a.submitted_answer_id = sa.id
+            WHERE sa.survey_id = ? AND a.question_id = ? AND a.answer IS NOT NULL
+        """, (survey_id, question_id)).fetchall()
+        return [r["answer"] for r in rows]
+
+    # Función para cambiar la base de datos
     def changes_to_database(self, command):
         self.cursor.execute(command)
         self.connection.commit()
         print("OK")
-        
 
 
 class SurveyAdmins:
@@ -214,7 +314,8 @@ class SurveyWhitelist:
             "SELECT 1 FROM survey_whitelist WHERE survey_id = ? AND user_id = ?",
             (survey_id, user_id)).fetchone()
         return result is not None
-    
+
+
 class Questions:
     def __init__(self, connection):
         self.connection = connection
@@ -223,11 +324,9 @@ class Questions:
     
     def add_question(self, survey_id, is_demographic, title, type, is_required=True):
         try:
-            # Obtener la posición máxima actual
             max_pos = self.cursor.execute(
                 "SELECT COALESCE(MAX(position), 0) FROM question WHERE survey_id = ?",
                 (survey_id,)).fetchone()[0]
-            
             self.cursor.execute(
                 "INSERT INTO question (survey_id, is_demographic, title, type, is_required, position) "
                 "VALUES (?, ?, ?, ?, ?, ?)",
@@ -251,7 +350,6 @@ class Questions:
         questions = self.cursor.execute(
             "SELECT id FROM question WHERE survey_id = ? ORDER BY position, id",
             (survey_id,)).fetchall()
-        
         for index, question in enumerate(questions, start=1):
             self.cursor.execute(
                 "UPDATE question SET position = ? WHERE id = ?",
@@ -263,23 +361,25 @@ class Questions:
         question = self.get_question(question_id)
         if not question:
             return False
-
         self.cursor.execute(
             "UPDATE question SET position = ? WHERE id = ?",
-            (new_position - 0.5, question_id))  # valor flotante temporal para evitar colisiones
+            (new_position - 0.5, question_id))
         self.connection.commit()
         self.reorder_positions(question["survey_id"])
         return True
     
     def get_question(self, question_id):
-        return self.cursor.execute("SELECT * FROM question WHERE id = ?", (question_id,)).fetchone()
+        return self.cursor.execute(
+            "SELECT * FROM question WHERE id = ?", (question_id,)).fetchone()
 
     def list_questions(self, survey_id, demographic=None):
         if demographic is not None:
-            return self.cursor.execute("SELECT * FROM question WHERE survey_id = ? AND is_demographic = ? ORDER BY position",
+            return self.cursor.execute(
+                "SELECT * FROM question WHERE survey_id = ? AND is_demographic = ? ORDER BY position",
                 (survey_id, demographic)).fetchall()
-        else:
-            return self.cursor.execute("SELECT * FROM question WHERE survey_id = ? ORDER BY position",(survey_id,)).fetchall()
+        return self.cursor.execute(
+            "SELECT * FROM question WHERE survey_id = ? ORDER BY position",
+            (survey_id,)).fetchall()
     
     def update_question(self, question_id, title, type, is_demographic, is_required):
         self.cursor.execute(
@@ -289,12 +389,10 @@ class Questions:
         return True
         
     def update_question_position(self, question_id, position):
-        """Actualiza la posición de una pregunta."""
-        self.cursor.execute("UPDATE question SET position = ? WHERE id = ?",
-            (position, question_id))
+        self.cursor.execute(
+            "UPDATE question SET position = ? WHERE id = ?", (position, question_id))
         self.connection.commit()
         return True
-    
 
 
 class QuestionOptions:
@@ -320,7 +418,6 @@ class QuestionOptions:
         options = self.cursor.execute(
             "SELECT id FROM question_option WHERE question_id = ? ORDER BY position, id",
             (question_id,)).fetchall()
-
         for index, option in enumerate(options, start=1):
             self.cursor.execute(
                 "UPDATE question_option SET position = ? WHERE id = ?",
@@ -331,7 +428,6 @@ class QuestionOptions:
         option = self.get_option(option_id)
         if not option:
             return False
-
         self.cursor.execute(
             "UPDATE question_option SET position = ? WHERE id = ?",
             (new_position - 0.5, option_id))
@@ -340,14 +436,17 @@ class QuestionOptions:
         return True
 
     def get_option(self, option_id):
-        return self.cursor.execute("SELECT * FROM question_option WHERE id = ?",(option_id,)).fetchone()
+        return self.cursor.execute(
+            "SELECT * FROM question_option WHERE id = ?", (option_id,)).fetchone()
 
     def list_options(self, question_id):
-        return self.cursor.execute("SELECT * FROM question_option WHERE question_id = ? ORDER BY position",(question_id,)).fetchall()
+        return self.cursor.execute(
+            "SELECT * FROM question_option WHERE question_id = ? ORDER BY position",
+            (question_id,)).fetchall()
 
     def update_option(self, option_id, option_text):
-        """Actualiza el texto de una opción."""
-        self.cursor.execute("UPDATE question_option SET option_text = ? WHERE id = ?",
+        self.cursor.execute(
+            "UPDATE question_option SET option_text = ? WHERE id = ?",
             (option_text, option_id))
         self.connection.commit()
         return True
@@ -362,6 +461,7 @@ class QuestionOptions:
         self.reorder_positions(question_id)
         return True
 
+
 class SubmittedAnswers:
     def __init__(self, connection):
         self.connection = connection
@@ -372,7 +472,8 @@ class SubmittedAnswers:
         try:
             now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             self.cursor.execute(
-                "INSERT INTO submitted_answer (survey_id, user_hash, submitted_at, demographic_group) VALUES (?, ?, ?, ?)",
+                "INSERT INTO submitted_answer (survey_id, user_hash, submitted_at, demographic_group) "
+                "VALUES (?, ?, ?, ?)",
                 (survey_id, user_hash, now, demographic_group))
             self.connection.commit()
             return self.cursor.lastrowid
@@ -389,11 +490,15 @@ class SubmittedAnswers:
             return False
     
     def get_user_submitted_answer(self, user_hash):
-        return self.cursor.execute("SELECT * FROM submitted_answer WHERE user_hash = ?",(user_hash,)).fetchone()
+        return self.cursor.execute(
+            "SELECT * FROM submitted_answer WHERE user_hash = ?",
+            (user_hash,)).fetchone()
     
     def get_usurvey_submitted_answers(self, survey):
-        return self.cursor.execute("SELECT * FROM submitted_answer WHERE survey_id = ?",(survey,)).fetchall()
-    
+        return self.cursor.execute(
+            "SELECT * FROM submitted_answer WHERE survey_id = ?",
+            (survey,)).fetchall()
+
 
 class Answers:
     def __init__(self, connection):
@@ -404,7 +509,8 @@ class Answers:
     def add_answer(self, submitted_answer_id, question_id, option_id, answer):
         try:
             self.cursor.execute(
-                "INSERT INTO answer (submitted_answer_id, question_id, option_id, answer) VALUES (?, ?, ?, ?)",
+                "INSERT INTO answer (submitted_answer_id, question_id, option_id, answer) "
+                "VALUES (?, ?, ?, ?)",
                 (submitted_answer_id, question_id, option_id, answer))
             self.connection.commit()
             return True
@@ -419,7 +525,8 @@ class Answers:
             return False
     
     def get_value(self, answer_id):
-        answer = self.cursor.execute("SELECT * FROM answer WHERE id = ?", (answer_id,)).fetchone()
+        answer = self.cursor.execute(
+            "SELECT * FROM answer WHERE id = ?", (answer_id,)).fetchone()
         if not answer:
             return False
         if answer["option_id"] is not None:
@@ -438,7 +545,8 @@ class Statistics:
     def add_value(self, survey_id, demographic_group, stat_type):
         try:
             self.cursor.execute(
-                "INSERT INTO statistic (survey_id, demographic_group, count, stat_type, value) VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO statistic (survey_id, demographic_group, count, stat_type, value) "
+                "VALUES (?, ?, ?, ?, ?)",
                 (survey_id, demographic_group, 0, stat_type, 0))
             self.connection.commit()
             return True
@@ -446,16 +554,19 @@ class Statistics:
             return False
     
     def get_value_demo(self, survey_id, demographic_group):
-        return self.cursor.execute("SELECT * FROM statistic WHERE survey_id = ? AND demographic_group = ?",
+        return self.cursor.execute(
+            "SELECT * FROM statistic WHERE survey_id = ? AND demographic_group = ?",
             (survey_id, demographic_group)).fetchone()
     
     def get_values(self, survey_id):
-        return self.cursor.execute("SELECT * FROM statistic WHERE survey_id = ?", (survey_id,)).fetchall()
+        return self.cursor.execute(
+            "SELECT * FROM statistic WHERE survey_id = ?", (survey_id,)).fetchall()
     
     def update_values(self, survey_id, demographic_group, count, stat_type, value):
         try:
             self.cursor.execute(
-                "UPDATE statistic SET count = ?, value = ? WHERE survey_id = ? AND demographic_group = ? AND stat_type = ?",
+                "UPDATE statistic SET count = ?, value = ? "
+                "WHERE survey_id = ? AND demographic_group = ? AND stat_type = ?",
                 (count, value, survey_id, demographic_group, stat_type))
             self.connection.commit()
             return True
@@ -463,12 +574,11 @@ class Statistics:
             return False
     
     def add_all_values(self, survey_id, demographic_group):
-        stat_types = ["sum", "average"]
-        for type in stat_types:
-            self.add_value(survey_id, demographic_group, type)
-
+        for t in ["sum", "average"]:
+            self.add_value(survey_id, demographic_group, t)
 
 
 if __name__ == "__main__":
     survey_db = Survey()
-    survey_db.changes_to_database("ALTER TABLE question ADD COLUMN is_required BOOL DEFAULT 1;")
+    survey_db.changes_to_database(
+        "ALTER TABLE question ADD COLUMN is_required BOOL DEFAULT 1;")

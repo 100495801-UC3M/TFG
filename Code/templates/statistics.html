@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Estadísticas – {{ survey.title }} | AGULE</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/surveys.css') }}">
+    <style>
+        body { align-items: flex-start; padding: 20px 0; }
+
+        .stats-card {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-left: 5px solid #007bff;
+        }
+
+        .stats-card h3 { margin: 0 0 14px; font-size: 1rem; color: #333; }
+
+        /* Barras de progreso */
+        .bar-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+        .bar-label { flex: 0 0 180px; font-size: .85rem; color: #555; word-break: break-word; }
+        .bar-track {
+            flex: 1;
+            background: #e9ecef;
+            border-radius: 4px;
+            height: 18px;
+            overflow: hidden;
+        }
+        .bar-fill {
+            height: 100%;
+            background: #007bff;
+            border-radius: 4px;
+            transition: width .3s;
+        }
+        .bar-count {
+            flex: 0 0 60px;
+            text-align: right;
+            font-size: .85rem;
+            color: #333;
+            font-weight: 600;
+        }
+
+        /* Cuadro numérico */
+        .num-box {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .num-stat {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 12px 20px;
+            text-align: center;
+            min-width: 120px;
+        }
+        .num-stat .val { font-size: 1.6rem; font-weight: 700; color: #007bff; }
+        .num-stat .lbl { font-size: .75rem; color: #888; margin-top: 4px; }
+
+        /* Respuestas texto */
+        .text-answer {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 8px 12px;
+            margin-bottom: 6px;
+            font-size: .9rem;
+            color: #444;
+        }
+
+        .total-box {
+            background: #e8f5e9;
+            border: 1px solid #a5d6a7;
+            border-radius: 8px;
+            padding: 16px 24px;
+            display: inline-flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 30px;
+        }
+        .total-box .big { font-size: 2.4rem; font-weight: 700; color: #2e7d32; }
+        .total-box .lbl { color: #555; font-size: .95rem; }
+
+        .badge-ended {
+            background: #e3f2fd;
+            color: #1565c0;
+            border: 1px solid #90caf9;
+            border-radius: 12px;
+            padding: 2px 10px;
+            font-size: .75rem;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <!-- Back button -->
+    <div style="margin-bottom:20px;">
+        <button class="secondary" onclick="history.back()">← Volver</button>
+        {% if is_creator or is_admin %}
+            <button onclick="window.location.href='/edit_survey/{{ encode_survey_id(survey.id) }}'"
+                    style="margin-left:10px;">
+                ✏️ Editar encuesta
+            </button>
+        {% endif %}
+    </div>
+
+    <!-- Survey header -->
+    <div class="survey-info" style="margin-bottom:24px;">
+        <h1 style="margin:0 0 8px;">📊 {{ survey.title }}</h1>
+        {% if survey.description %}
+            <p>{{ survey.description }}</p>
+        {% endif %}
+        <p style="margin:6px 0 0;"><small>
+            Creada: {{ survey.created_at }}
+            {% if survey.end_at %} · Fin: {{ survey.end_at }}{% endif %}
+        </small></p>
+    </div>
+
+    <!-- Total de votos -->
+    <div class="total-box">
+        <span class="big">{{ total_votes }}</span>
+        <span class="lbl">respuesta{{ 's' if total_votes != 1 else '' }} recibida{{ 's' if total_votes != 1 else '' }}</span>
+    </div>
+
+    {% if total_votes == 0 %}
+        <div class="no-surveys">
+            <p>Todavía no hay respuestas para esta encuesta.</p>
+        </div>
+    {% else %}
+        <!-- Estadísticas por pregunta -->
+        {% for entry in q_stats %}
+            {% set q = entry.question %}
+            <div class="stats-card">
+                <h3>
+                    #{{ loop.index }} — {{ q.title }}
+                    {% if q.is_demographic %}
+                        <span class="badge-demo" style="margin-left:8px;">👥 Demográfica</span>
+                    {% endif %}
+                </h3>
+
+                {% if entry.type in ('s', 'm') %}
+                    <!-- Opción única / múltiple: barras -->
+                    {% set total_ans = entry.option_counts.values() | sum %}
+                    {% for option in q.options %}
+                        {% set cnt = entry.option_counts.get(option.id, 0) %}
+                        {% set pct = (cnt / total_votes * 100) | round(1) if total_votes > 0 else 0 %}
+                        <div class="bar-row">
+                            <span class="bar-label">{{ option.option_text }}</span>
+                            <div class="bar-track">
+                                <div class="bar-fill" style="width:{{ pct }}%;"></div>
+                            </div>
+                            <span class="bar-count">{{ cnt }} <span style="color:#aaa;font-weight:400;">({{ pct }}%)</span></span>
+                        </div>
+                    {% endfor %}
+
+                {% elif entry.type == 'n' %}
+                    <!-- Numérico: sum, average, count -->
+                    <div class="num-box">
+                        <div class="num-stat">
+                            <div class="val">{{ entry.numeric.count }}</div>
+                            <div class="lbl">Respuestas</div>
+                        </div>
+                        <div class="num-stat">
+                            <div class="val">{{ entry.numeric.sum | round(2) }}</div>
+                            <div class="lbl">Suma</div>
+                        </div>
+                        <div class="num-stat">
+                            <div class="val">{{ entry.numeric.average | round(2) }}</div>
+                            <div class="lbl">Media</div>
+                        </div>
+                    </div>
+
+                {% elif entry.type == 't' %}
+                    <!-- Texto libre -->
+                    {% if entry.texts %}
+                        {% for txt in entry.texts %}
+                            <div class="text-answer">{{ txt }}</div>
+                        {% endfor %}
+                    {% else %}
+                        <p style="color:#888;font-size:.9rem;">Sin respuestas de texto.</p>
+                    {% endif %}
+                {% endif %}
+            </div>
+        {% endfor %}
+    {% endif %}
+
+</div>
+</body>
+</html>

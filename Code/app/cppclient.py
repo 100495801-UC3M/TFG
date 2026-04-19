@@ -1,19 +1,19 @@
 """
-app/client.py  —  Cliente SEAL (Python)
+app/cppclient.py  —  Cliente SEAL (Python)
 ================================================
-Envía dos listas cifradas con SEAL (CKKS) al servidor (servidor_seal).
-El servidor opera sobre los datos SIN descifrarlos y devuelve el resultado
-cifrado; este script es el único que puede descifrarlo.
+Comunica con servidor SEAL en WSL para operaciones homomorfas.
+Solo encripta lista2 (nuevos datos); lista1 (estadísticas acumuladas) 
+viene ya encriptada desde la BD.
 
 Operaciones soportadas:
-  "suma"  → resultado[i] = lista1[i] + lista2[i]
-  "media" → resultado[i] = (lista1[i] + lista2[i]) / 2
+  "suma"  → resultado[i] = lista1_encriptada[i] + lista2_cifrada[i]
+  "media" → resultado[i] = (lista1_encriptada[i] + lista2_cifrada[i]) / 2
 
 Protocolo (little-endian uint64_t + bytes):
   Cliente → Servidor:
     1. uint64_t + bytes  → comando ("suma" o "media")
-    2. uint64_t + bytes  → ciphertext 1
-    3. uint64_t + bytes  → ciphertext 2
+    2. uint64_t + bytes  → ciphertext 1 (encriptado, de BD)
+    3. uint64_t + bytes  → ciphertext 2 (encriptado, lista2 nueva)
   Servidor → Cliente:
     4. uint64_t + bytes  → resultado cifrado
 
@@ -24,22 +24,23 @@ import socket
 import struct
 import tempfile
 import os
+import base64
+import logging
 import tenseal.sealapi as seal
+
 
 # ──────────────────────────────────────────────
 #  Configuración de red
-#  WSL2: 127.0.0.1 suele funcionar con port-forwarding.
-#  Si no, obtén la IP con: wsl hostname -I
 # ──────────────────────────────────────────────
 HOST = "127.0.0.1"
 PORT = 8080
 
 
 # ══════════════════════════════════════════════
-#  SEAL helpers
+#  SEAL helpers (funciones globales)
 # ══════════════════════════════════════════════
 
-def crear_contexto():
+def _crear_contexto():
     """Parámetros idénticos a los del servidor (servidor_seal.cpp)."""
     parms = seal.EncryptionParameters(seal.SCHEME_TYPE.CKKS)
     parms.set_poly_modulus_degree(8192)
@@ -47,7 +48,8 @@ def crear_contexto():
     return seal.SEALContext(parms, True, seal.SEC_LEVEL_TYPE.TC128)
 
 
-def cifrar_lista(encryptor, encoder, datos, scale):
+def _cifrar_lista(encryptor, encoder, datos, scale):
+    """Cifra una lista de floats."""
     pt = seal.Plaintext()
     encoder.encode(datos, scale, pt)
     ct = seal.Ciphertext()
@@ -55,46 +57,53 @@ def cifrar_lista(encryptor, encoder, datos, scale):
     return ct
 
 
-def serializar_ct(ct):
+def _serializar_ct(ct):
     """Serializa un ciphertext a bytes usando el formato nativo de SEAL."""
     fd, path = tempfile.mkstemp(suffix=".ct")
     os.close(fd)
-    ct.save(path)
-    with open(path, "rb") as f:
-        data = f.read()
-    os.unlink(path)
-    return data
+    try:
+        ct.save(path)
+        with open(path, "rb") as f:
+            data = f.read()
+        return data
+    finally:
+        if os.path.exists(path):
+            os.unlink(path)
 
 
-def deserializar_ct(context, data):
+def _deserializar_ct(context, data):
     """Deserializa bytes a un ciphertext SEAL."""
     fd, path = tempfile.mkstemp(suffix=".ct")
     os.close(fd)
-    with open(path, "wb") as f:
-        f.write(data)
-    ct = seal.Ciphertext()
-    ct.load(context, path)
-    os.unlink(path)
-    return ct
+    try:
+        with open(path, "wb") as f:
+            f.write(data)
+        ct = seal.Ciphertext()
+        ct.load(context, path)
+        return ct
+    finally:
+        if os.path.exists(path):
+            os.unlink(path)
 
 
 # ══════════════════════════════════════════════
-#  Socket helpers
+#  Socket helpers (funciones globales)
 # ══════════════════════════════════════════════
 
-def enviar_bloque(sock, data: bytes):
+def _enviar_bloque(sock, data: bytes):
     """Envía uint64_t(tamaño) + datos (little-endian)."""
     sock.sendall(struct.pack('<Q', len(data)))
     sock.sendall(data)
 
 
-def recibir_bloque(sock) -> bytes:
+def _recibir_bloque(sock) -> bytes:
     """Recibe uint64_t(tamaño) + datos."""
     size = struct.unpack('<Q', _recv_exacto(sock, 8))[0]
     return _recv_exacto(sock, size)
 
 
 def _recv_exacto(sock, n: int) -> bytes:
+    """Recibe exactamente n bytes."""
     buf = bytearray()
     while len(buf) < n:
         chunk = sock.recv(n - len(buf))
@@ -105,64 +114,153 @@ def _recv_exacto(sock, n: int) -> bytes:
 
 
 # ══════════════════════════════════════════════
-#  Main
+#  Cliente SEAL
+# ══════════════════════════════════════════════
+
+class Cliente:
+    """
+    Cliente SEAL para operaciones homomorfas con el servidor.
+    
+    Flujo:
+    1. Recibe lista1_encrypted_base64 (de BD, puede ser None)
+    2. Recibe lista2_plain (nuevos datos sin cifrar)
+    3. Recibe operacion ("suma" o "media")
+    4. Encripta SOLO lista2
+    5. Deserializa lista1 (si no es None)
+    6. Envía ambas al servidor
+    7. Recibe resultado encriptado
+    8. Retorna resultado en base64
+    """
+    
+    def __init__(self):
+        """Inicializa contexto SEAL y genera claves."""
+        try:
+            self.context = _crear_contexto()
+            keygen = seal.KeyGenerator(self.context)
+            
+            self.public_key = seal.PublicKey()
+            keygen.create_public_key(self.public_key)
+            self.secret_key = keygen.secret_key()
+            
+            self.encryptor = seal.Encryptor(self.context, self.public_key)
+            self.decryptor = seal.Decryptor(self.context, self.secret_key)
+            self.encoder = seal.CKKSEncoder(self.context)
+            self.scale = 2 ** 40
+            
+            logging.info("Cliente SEAL inicializado correctamente")
+        except Exception as e:
+            logging.error(f"Error al inicializar Cliente SEAL: {e}")
+            raise
+    
+    def compute_sum(self, lista2_plain, lista1_encrypted_base64=None):
+        """
+        Calcula suma homomórfica: resultado = lista1_encriptada + lista2_encriptada.
+        
+        Args:
+            lista2_plain: list[float] - nuevos datos sin cifrar
+            lista1_encrypted_base64: str base64 - estadísticas encriptadas de BD (puede ser None)
+        
+        Returns:
+            str base64 - resultado encriptado, listo para guardar en BD
+        """
+        return self._ejecutar_operacion("suma", lista2_plain, lista1_encrypted_base64)
+    
+    def compute_average(self, lista2_plain, lista1_encrypted_base64=None):
+        """
+        Calcula media homomórfica: resultado = (lista1_encriptada + lista2_encriptada) / 2.
+        
+        Args:
+            lista2_plain: list[float] - nuevos datos sin cifrar
+            lista1_encrypted_base64: str base64 - estadísticas encriptadas de BD (puede ser None)
+        
+        Returns:
+            str base64 - resultado encriptado, listo para guardar en BD
+        """
+        return self._ejecutar_operacion("media", lista2_plain, lista1_encrypted_base64)
+    
+    def _ejecutar_operacion(self, operacion, lista2_plain, lista1_encrypted_base64):
+        """
+        Ejecuta operación homomórfica.
+        
+        1. Si lista1_encrypted_base64 es None, crea lista1 de ceros y la encripta
+        2. Si lista1_encrypted_base64 no es None, la deserializa (ya encriptada)
+        3. Encripta lista2_plain
+        4. Envía ambas al servidor
+        5. Recibe resultado encriptado
+        6. Retorna en base64
+        """
+        try:
+            # Paso 1: Preparar lista1 (encriptada)
+            if lista1_encrypted_base64 is None:
+                # Primera vez: encriptar ceros
+                lista1_ceros = [0.0] * len(lista2_plain)
+                ct1 = _cifrar_lista(self.encryptor, self.encoder, lista1_ceros, self.scale)
+                bytes1 = _serializar_ct(ct1)
+            else:
+                # Deserializar desde base64
+                try:
+                    bytes1 = base64.b64decode(lista1_encrypted_base64)
+                except Exception as e:
+                    logging.error(f"Error al decodificar lista1 base64: {e}")
+                    return None
+            
+            # Paso 2: Encriptar lista2 (nuevos datos)
+            ct2 = _cifrar_lista(self.encryptor, self.encoder, lista2_plain, self.scale)
+            bytes2 = _serializar_ct(ct2)
+            
+            logging.debug(f"Lista1 cifrada: {len(bytes1):,} bytes")
+            logging.debug(f"Lista2 cifrada: {len(bytes2):,} bytes")
+            
+            # Paso 3: Conectar al servidor y enviar
+            resultado_bytes = None
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.connect((HOST, PORT))
+                    _enviar_bloque(s, operacion.encode("utf-8"))  # comando
+                    _enviar_bloque(s, bytes1)                     # ct1 (lista1)
+                    _enviar_bloque(s, bytes2)                     # ct2 (lista2)
+                    resultado_bytes = _recibir_bloque(s)          # resultado
+                    
+                logging.debug(f"Resultado recibido del servidor: {len(resultado_bytes):,} bytes")
+            except socket.error as e:
+                logging.error(f"Error de conexión con servidor SEAL: {e}")
+                return None
+            
+            # Paso 4: Convertir a base64 y retornar
+            resultado_base64 = base64.b64encode(resultado_bytes).decode('utf-8')
+            logging.info(f"Operación '{operacion}' completada exitosamente")
+            
+            return resultado_base64
+            
+        except Exception as e:
+            logging.error(f"Error en _ejecutar_operacion: {e}")
+            return None
+
+
+# ══════════════════════════════════════════════
+#  Main (para testing)
 # ══════════════════════════════════════════════
 
 def main():
+    """Test de la clase Cliente."""
+    logging.basicConfig(level=logging.DEBUG)
+    
     lista1    = [10.0, 20.0, 30.0, 60.2, 40.2]
     lista2    = [4.0,  6.0,  8.0,  10.0, 20.4]
-    operacion = "media"   # "media" o "suma"
-
-    print("=" * 45)
-    print(f"  Lista 1   : {lista1}")
-    print(f"  Lista 2   : {lista2}")
-    print(f"  Operación : {operacion}")
-    print("=" * 45)
-
-    # Configurar SEAL
-    context   = crear_contexto()
-    keygen    = seal.KeyGenerator(context)
-    pk        = seal.PublicKey()
-    keygen.create_public_key(pk)
-    sk        = keygen.secret_key()
-    encryptor = seal.Encryptor(context, pk)
-    decryptor = seal.Decryptor(context, sk)
-    encoder   = seal.CKKSEncoder(context)
-    scale     = 2 ** 40
-
-    # Cifrar
-    ct1    = cifrar_lista(encryptor, encoder, lista1, scale)
-    ct2    = cifrar_lista(encryptor, encoder, lista2, scale)
-    bytes1 = serializar_ct(ct1)
-    bytes2 = serializar_ct(ct2)
-
-    print(f"\n  ct1 cifrado : {len(bytes1):,} bytes")
-    print(f"  ct2 cifrado : {len(bytes2):,} bytes")
-    print(f"\n  Conectando a {HOST}:{PORT}...")
-
-    # Enviar al servidor y recibir resultado
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.connect((HOST, PORT))
-        print("  Conectado. Enviando datos cifrados...\n")
-        enviar_bloque(s, operacion.encode("utf-8"))  # 1. comando
-        enviar_bloque(s, bytes1)                     # 2. ct1
-        enviar_bloque(s, bytes2)                     # 3. ct2
-        resultado_bytes = recibir_bloque(s)          # 4. resultado
-
-    print(f"  Resultado cifrado recibido ({len(resultado_bytes):,} bytes)")
-
-    # Descifrar (solo el cliente tiene la clave privada)
-    result_ct = deserializar_ct(context, resultado_bytes)
-    result_pt = seal.Plaintext()
-    decryptor.decrypt(result_ct, result_pt)
-    resultado = encoder.decode_double(result_pt)[:len(lista1)]
-
-    print("\n" + "=" * 45)
-    print(f"  Resultado de '{operacion}' (descifrado en cliente):")
-    for i, v in enumerate(resultado):
-        esperado = (lista1[i] + lista2[i]) / (2 if operacion == "media" else 1)
-        print(f"    [{i}]  {v:10.4f}   (esperado: {esperado:.4f})")
-    print("=" * 45)
+    
+    cliente = Cliente()
+    
+    # Test 1: suma
+    print("\n=== Test SUMA ===")
+    resultado_suma_b64 = cliente.compute_sum(lista2, None)
+    if resultado_suma_b64:
+        print(f"Suma completada. Resultado (base64): {resultado_suma_b64[:50]}...")
+    
+    # Test 2: media
+    print("\n=== Test MEDIA ===")
+    resultado_media_b64 = cliente.compute_average(lista2, None)
+    if resultado_media_b64:
+        print(f"Media completada. Resultado (base64): {resultado_media_b64[:50]}...")
 
 
 if __name__ == "__main__":
