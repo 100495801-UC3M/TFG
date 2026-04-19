@@ -7,14 +7,20 @@ import requests
 import time
 import uuid
 import secrets
-from datetime import timedelta
+from datetime import timedelta, datetime
 import app.security as security
 from app.users import Users
-import app.cppclient as client
+from app.cppclient import Cliente
 from app.survey import Survey, SurveyAdmins, SurveyWhitelist, Questions, QuestionOptions, Answers, SubmittedAnswers, Statistics
+from app.survey_helpers import (
+    load_questions_with_options,
+    parse_visibility,
+    check_survey_access,
+    build_numeric_stats_list
+)
 # TODO Quitar para mensajes
 from app.messages import Messages
-from flask import Flask, render_template, request, redirect, url_for, session, abort
+from flask import Flask, render_template, request, redirect, url_for, session, abort, flash
 
 
 # Iniciamos el servidor flask
@@ -50,8 +56,97 @@ SECRET_KEY = security.load_search_secret()
 # Configuración logging para que se muestre en la consola
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-# Para codificar las ids de las encuestas para las uris
+# ── Cliente SEAL ──────────────────────────────────────────────────────────────
+cliente_seal = Cliente()
+
 app.jinja_env.globals["encode_survey_id"] = lambda sid: security.encode_survey_id(sid, SECRET_KEY)
+app.jinja_env.globals["survey_is_ended"] = survey_db.is_ended
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SEAL – Estadísticas cifradas homomórficas
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def send_surveys_to_server(survey_id, demographic_group, answers_plain):
+    """
+    Envía respuestas numéricas al servidor SEAL para calcular estadísticas
+    cifradas mediante operaciones homomorfas.
+
+    Parámetros:
+      - survey_id         : id de la encuesta
+      - demographic_group : grupo demográfico (ej: pregunta_id como string)
+      - answers_plain     : lista[float] de respuestas sin cifrar
+
+    Retorna True si el servidor procesó exitosamente, False en caso contrario.
+    """
+    try:
+        if not answers_plain:
+            return False
+
+        # Recuperar lista encriptada anterior de BD (será None si es la primera vez)
+        existing = statistics_db.get_value_demo(survey_id, demographic_group)
+        lista1_encrypted_base64 = None
+        if existing and existing['stat_type'] == 'sum':
+            lista1_encrypted_base64 = existing['value']
+
+        # ── Llamada al servidor C++ vía cppclient ──────────────────────────
+        # Ambos métodos reciben: lista2_plain, lista1_encrypted_base64
+        # cppclient solo encripta lista2, deserializa lista1 si existe
+        result_sum_b64 = cliente_seal.compute_sum(answers_plain, lista1_encrypted_base64)
+        result_avg_b64 = cliente_seal.compute_average(answers_plain, lista1_encrypted_base64)
+
+        if result_sum_b64 is None or result_avg_b64 is None:
+            logging.warning(f"SEAL retornó None para survey {survey_id}, grupo {demographic_group}")
+            return False
+
+        n = len(answers_plain)
+
+        # Insertar o actualizar en la tabla statistics
+        if existing:
+            statistics_db.update_values(survey_id, demographic_group, n, 'sum', result_sum_b64)
+            statistics_db.update_values(survey_id, demographic_group, n, 'average', result_avg_b64)
+        else:
+            statistics_db.add_all_values(survey_id, demographic_group)
+            statistics_db.update_values(survey_id, demographic_group, n, 'sum', result_sum_b64)
+            statistics_db.update_values(survey_id, demographic_group, n, 'average', result_avg_b64)
+
+        logging.info(f"Estadísticas SEAL actualizadas – encuesta {survey_id}, grupo {demographic_group}")
+        return True
+
+    except Exception as e:
+        logging.error(f"Error actualizando estadísticas SEAL: {e}")
+        return False
+
+
+def trigger_seal_for_survey(survey_id):
+    """
+    Itera las preguntas numéricas de la encuesta y calcula estadísticas cifradas.
+    Se invoca tras cada nueva votación.
+    Devuelve True si todo fue bien, False si alguna llamada falló.
+    """
+    try:
+        # Construir lista de estadísticas numéricas: [0, suma, 0, media, ...]
+        # Solo procesa preguntas numéricas, pone 0 en las demás
+        stats_list = build_numeric_stats_list(survey_id, questions_db, survey_db, submittedAnswers_db)
+        
+        if not stats_list or sum(stats_list) == 0:
+            logging.debug(f"Sin datos numéricos para encuesta {survey_id}")
+            return True
+
+        # Agrupar por survey (demographic_group = "numeric_stats")
+        demographic_group = "numeric_stats"
+        
+        return send_surveys_to_server(survey_id, demographic_group, stats_list)
+
+    except Exception as e:
+        logging.error(f"Error en trigger_seal_for_survey: {e}")
+        return False
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Nota: Funciones helper movidas a app/survey_helpers.py
+# Se importan y usan con parámetros de BD pasados explícitamente
+# ═════════════════════════════════════════════════════════════════════════════════
 
 
 route = "/"
@@ -245,6 +340,7 @@ def home():
  
     # ── Datos para el template ────────────────────────────────────
     user_surveys  = survey_db.get_user_surveys(username)
+    admin_surveys = survey_db.get_surveys_as_admin(username)
  
     found         = session.get("found")
     user_searched = session.get("user_searched")
@@ -268,6 +364,7 @@ def home():
         username      = username,
         role          = session["role"],
         user_surveys  = user_surveys,
+        admin_surveys = admin_surveys, 
         found         = found,
         user_searched = user_searched,
         found_surveys = found_surveys,
@@ -308,7 +405,7 @@ def list_users():
 
 # PÁGINA EXCLUSIVA PARA ADMINS: Acceder a la lista de mensajes
 # TODO Quitar para mensajes
-"""route = re.sub(r"^(\/).*", r"\1messages", route)
+r"""route = re.sub(r"^(\/).*", r"\1messages", route)
 @app.route(route, methods=["GET", "POST"])
 def list_messages():
     # Ruta de lista de mensajes
@@ -614,6 +711,11 @@ def create_survey():
         if not survey or survey["creator_id"] != username:
             abort(403)
         questions = load_questions_with_options(int(survey_id))
+        admins    = surveyAdmins_db.list_admins(survey_id)
+        whitelist = surveyWhitelist_db.list_whitelist(survey_id)
+    else:
+        admins    = []
+        whitelist = []
     
     if request.method == "POST":
         if "create_survey" in request.form:
@@ -627,7 +729,6 @@ def create_survey():
                 return render_template("create_survey.html", username=username, survey_id=None, 
                     error="El título de la encuesta es obligatorio.")
             
-            # Validar que start_at < end_at si ambas están presentes
             if start_at and end_at:
                 try:
                     from datetime import datetime
@@ -650,7 +751,7 @@ def create_survey():
         if "add_question" in request.form:
             if not survey_id:
                 return render_template("create_survey.html", username=username, survey_id=None,
-                    error="Primero debes crear una encuesta.")
+                    admins=admins, whitelist=whitelist, error="Primero debes crear una encuesta.")
             
             question_title = request.form.get("question_title", "").strip()
             question_type  = request.form.get("question_type", "t")  # t: text, n: numeric, s: single, m: multiple
@@ -663,6 +764,7 @@ def create_survey():
                 questions = load_questions_with_options(int(survey_id))
                 survey_token = security.encode_survey_id(survey_id, SECRET_KEY) if survey_id else None
                 return render_template("create_survey.html", username=username, survey_id=survey_token,
+                    admins=admins, whitelist=whitelist,
                     survey=dict(survey), questions=questions, error="El título de la pregunta es obligatorio.")
             
             # Para preguntas de opción única o múltiple, se requieren opciones
@@ -670,6 +772,7 @@ def create_survey():
                 questions = load_questions_with_options(int(survey_id))
                 survey_token = security.encode_survey_id(survey_id, SECRET_KEY) if survey_id else None
                 return render_template("create_survey.html", username=username, survey_id=survey_token,
+                    admins=admins, whitelist=whitelist,
                     survey=dict(survey), questions=questions, error="Las preguntas de opción requieren al menos una opción.")
             
             question_id = questions_db.add_question(int(survey_id), is_demographic, question_title, question_type, is_required)
@@ -684,6 +787,7 @@ def create_survey():
                 questions = load_questions_with_options(int(survey_id))
                 survey_token = security.encode_survey_id(survey_id, SECRET_KEY) if survey_id else None
                 return render_template("create_survey.html", username=username, survey_id=survey_token,
+                    admins=admins, whitelist=whitelist,
                     survey=dict(survey), questions=questions, info="Pregunta agregada correctamente.")
         
         # Actualizar pregunta
@@ -698,6 +802,7 @@ def create_survey():
                 questions = load_questions_with_options(int(survey_id))
                 survey_token = security.encode_survey_id(survey_id, SECRET_KEY) if survey_id else None
                 return render_template("create_survey.html", username=username, survey_id=survey_token,
+                    admins=admins, whitelist=whitelist,
                     survey=dict(survey), questions=questions, error="El título de la pregunta es obligatorio.")
             
             questions_db.update_question(int(question_id), edit_title, edit_type, edit_is_demographic, edit_is_required)
@@ -722,6 +827,7 @@ def create_survey():
             questions = load_questions_with_options(int(survey_id))
             survey_token = security.encode_survey_id(survey_id, SECRET_KEY) if survey_id else None
             return render_template("create_survey.html", username=username, survey_id=survey_token,
+                admins=admins, whitelist=whitelist,
                 survey=dict(survey), questions=questions, info="Pregunta actualizada correctamente.")
         
         # Eliminar pregunta
@@ -732,6 +838,7 @@ def create_survey():
             questions = load_questions_with_options(int(survey_id))
             survey_token = security.encode_survey_id(survey_id, SECRET_KEY) if survey_id else None
             return render_template("create_survey.html", username=username, survey_id=survey_token,
+                admins=admins, whitelist=whitelist,
                 survey=dict(survey), questions=questions, info="Pregunta eliminada correctamente.")
         
         # Reordenar preguntas
@@ -746,8 +853,50 @@ def create_survey():
             questions = load_questions_with_options(int(survey_id))
             survey_token = security.encode_survey_id(survey_id, SECRET_KEY) if survey_id else None
             return render_template("create_survey.html", username=username, survey_id=survey_token,
+                admins=admins, whitelist=whitelist,
                 survey=dict(survey), questions=questions, info="Orden actualizado.")
 
+        if "add_admin" in request.form and survey_id:
+            admin_name = request.form.get("admin_username", "").strip().lower()
+            admin_user = users_db.check_user(admin_name, "name")
+            if not admin_user:
+                questions = load_questions_with_options(int(survey_id))
+                admins    = surveyAdmins_db.list_admins(survey_id)
+                whitelist = surveyWhitelist_db.list_whitelist(survey_id)
+                return render_template("create_survey.html",
+                    username=username, survey_id=survey_token,
+                    survey=dict(survey), questions=questions,
+                    admins=admins, whitelist=whitelist,
+                    error=f"El usuario '{admin_name}' no existe.", info=None)
+            
+            if admin_user["name"] == username:
+                questions = load_questions_with_options(int(survey_id))
+                return render_template("create_survey.html",
+                    username=username, survey_id=survey_token,
+                    survey=dict(survey), questions=questions,
+                    admins=admins, whitelist=whitelist,
+                    error="No puedes añadirte a ti mismo como admin.", info=None)
+            
+            surveyAdmins_db.add_admin(int(survey_id), admin_user["name"])
+            questions = load_questions_with_options(int(survey_id))
+            survey = survey_db.get_survey(int(survey_id))
+            return render_template("create_survey.html",
+                username=username, survey_id=survey_token,
+                survey=dict(survey), questions=questions,
+                admins=admins, whitelist=whitelist,
+                error=None, info=f"'{admin_name}' añadido como admin.")
+
+        if "remove_admin" in request.form and survey_id:
+            admin_to_remove = request.form.get("admin_to_remove")
+            surveyAdmins_db.remove_admin(int(survey_id), admin_to_remove)
+            questions = load_questions_with_options(int(survey_id))
+            survey = survey_db.get_survey(int(survey_id))
+            admins = surveyAdmins_db.list_admins(survey_id)
+            return render_template("create_survey.html",
+                username=username, survey_id=survey_token,
+                survey=dict(survey), questions=questions,
+                admins=admins, whitelist=whitelist,
+                error=None, info="Admin eliminado correctamente.")
         
         # Cancelar (volver a home)
         if "cancel" in request.form:
@@ -758,10 +907,10 @@ def create_survey():
     
     survey_token = security.encode_survey_id(survey_id, SECRET_KEY) if survey_id else None
     return render_template("create_survey.html", username=username, survey_id=survey_token,
+        admins=admins, whitelist=whitelist,
         survey=dict(survey) if survey else None, questions=questions, error=None, info=None)
 
 
-# TODO Este int debe cambiarse por un hash random
 @app.route("/edit_survey/<string:survey_token>", methods=["GET", "POST"])
 def edit_survey(survey_token):
     survey_id = security.decode_survey_id(survey_token, SECRET_KEY)
@@ -781,33 +930,41 @@ def edit_survey(survey_token):
         abort(403)
     
     questions = load_questions_with_options(survey_id)
+    admins    = surveyAdmins_db.list_admins(survey_id)
+    whitelist = surveyWhitelist_db.list_whitelist(survey_id)
     
     if request.method == "POST":
-        # Editar fechas de la encuesta
         if "edit_survey" in request.form:
-            start_at = request.form.get("start_at", "").strip()
-            end_at   = request.form.get("end_at", "").strip()
-            
-            # Validar que start_at < end_at si ambas están presentes
+            start_at   = request.form.get("start_at", "").strip()
+            end_at     = request.form.get("end_at", "").strip()
+            visibility = request.form.get("visibility", "y")
+
             if start_at and end_at:
                 try:
-                    from datetime import datetime
-                    start = datetime.fromisoformat(start_at)
-                    end = datetime.fromisoformat(end_at)
-                    if start >= end:
+                    if datetime.fromisoformat(start_at) >= datetime.fromisoformat(end_at):
                         questions = load_questions_with_options(survey_id)
-                        return render_template("edit_survey.html", username=username, survey_id=survey_id,
-                            survey=dict(survey), questions=questions, error="La fecha de inicio debe ser anterior a la fecha de fin.")
+                        return render_template("edit_survey.html",
+                            username=username, survey_id=survey_id,
+                            survey=dict(survey), questions=questions,
+                            admins=admins, whitelist=whitelist,
+                            error="La fecha de inicio debe ser anterior a la fecha de fin.",
+                            info=None)
                 except ValueError:
                     pass
-            
-            is_public = request.form.get("is_public", "n")
-            survey_db.modify_survey(survey_id, start_at, end_at, is_public)
+
+            is_public, privacy_mode, new_code = parse_visibility(visibility)
+            if privacy_mode == 'code' and new_code is None:
+                new_code = survey["access_code"]
+
+            survey_db.modify_survey(survey_id, start_at, end_at, is_public, privacy_mode, new_code)
             logging.info(f"Encuesta {survey_id} editada por {username}.")
-            survey = survey_db.get_survey(survey_id)
+            survey    = survey_db.get_survey(survey_id)
             questions = load_questions_with_options(survey_id)
-            return render_template("edit_survey.html", username=username, survey_id=survey_id, 
-                survey=dict(survey), questions=questions, info="Encuesta actualizada correctamente.")
+            return render_template("edit_survey.html",
+                username=username, survey_id=survey_id,
+                survey=dict(survey), questions=questions,
+                admins=admins, whitelist=whitelist,
+                error=None, info="Encuesta actualizada correctamente.")
         
         # Agregar pregunta a la encuesta
         if "add_question" in request.form:
@@ -820,11 +977,13 @@ def edit_survey(survey_token):
             if not question_title:
                 questions = load_questions_with_options(survey_id)
                 return render_template("edit_survey.html", username=username, survey_id=survey_id,
+                    admins=admins, whitelist=whitelist,
                     survey=dict(survey), questions=questions, error="El título de la pregunta es obligatorio.")
             
             if question_type in ["s", "m"] and not options:
                 questions = load_questions_with_options(survey_id)
                 return render_template("edit_survey.html", username=username, survey_id=survey_id,
+                    admins=admins, whitelist=whitelist,
                     survey=dict(survey), questions=questions, error="Las preguntas de opción requieren al menos una opción.")
             
             question_id = questions_db.add_question(survey_id, is_demographic, question_title, question_type, is_required)
@@ -837,6 +996,7 @@ def edit_survey(survey_token):
                 logging.info(f"Pregunta '{question_title}' agregada a encuesta {survey_id} por {username}.")
                 questions = load_questions_with_options(survey_id)
                 return render_template("edit_survey.html", username=username, survey_id=survey_id,
+                    admins=admins, whitelist=whitelist,
                     survey=dict(survey), questions=questions, info="Pregunta agregada correctamente.")
         
         # Actualizar pregunta
@@ -850,6 +1010,7 @@ def edit_survey(survey_token):
             if not edit_title:
                 questions = load_questions_with_options(survey_id)
                 return render_template("edit_survey.html", username=username, survey_id=survey_id,
+                    admins=admins, whitelist=whitelist,
                     survey=dict(survey), questions=questions, error="El título de la pregunta es obligatorio.")
             
             questions_db.update_question(int(question_id), edit_title, edit_type, edit_is_demographic, edit_is_required)
@@ -870,6 +1031,7 @@ def edit_survey(survey_token):
             logging.info(f"Pregunta actualizada en encuesta {survey_id} por {username}.")
             questions = load_questions_with_options(survey_id)
             return render_template("edit_survey.html", username=username, survey_id=survey_id,
+                admins=admins, whitelist=whitelist,
                 survey=dict(survey), questions=questions, info="Pregunta actualizada correctamente.")
         
         # Eliminar pregunta
@@ -879,6 +1041,7 @@ def edit_survey(survey_token):
             logging.info(f"Pregunta eliminada de encuesta {survey_id} por {username}.")
             questions = load_questions_with_options(survey_id)
             return render_template("edit_survey.html", username=username, survey_id=survey_id,
+                admins=admins, whitelist=whitelist,
                 survey=dict(survey), questions=questions, info="Pregunta eliminada correctamente.")
         
         # Reordenar preguntas
@@ -891,8 +1054,71 @@ def edit_survey(survey_token):
                 logging.info(f"Preguntas reordenadas en encuesta {survey_id} por {username}.")
             questions = load_questions_with_options(survey_id)
             return render_template("edit_survey.html", username=username, survey_id=survey_id,
+                admins=admins, whitelist=whitelist,
                 survey=dict(survey), questions=questions, info="Orden actualizado.")
         
+        if "add_admin" in request.form:
+            admin_name = request.form.get("admin_username", "").strip().lower()
+            admin_user = users_db.check_user(admin_name, "name")
+            if not admin_user:
+                return render_template("edit_survey.html",
+                    username=username, survey_id=survey_id,
+                    survey=dict(survey), questions=questions,
+                    admins=admins, whitelist=whitelist,
+                    error=f"El usuario '{admin_name}' no existe.", info=None)
+            
+            if admin_user["name"] == username:
+                return render_template("edit_survey.html",
+                    username=username, survey_id=survey_id,
+                    survey=dict(survey), questions=questions,
+                    admins=admins, whitelist=whitelist,
+                    error="No puedes añadirte a ti mismo como admin.", info=None)
+            
+            surveyAdmins_db.add_admin(survey_id, admin_user["name"])
+            admins = surveyAdmins_db.list_admins(survey_id)
+            return render_template("edit_survey.html",
+                username=username, survey_id=survey_id,
+                survey=dict(survey), questions=questions,
+                admins=admins, whitelist=whitelist,
+                info=f"El usuario '{admin_name}' añadido como admin.", error=None)
+
+        if "remove_admin" in request.form:
+            admin_to_remove = request.form.get("admin_to_remove")
+            surveyAdmins_db.remove_admin(survey_id, admin_to_remove)
+            admins = surveyAdmins_db.list_admins(survey_id)
+            return render_template("edit_survey.html",
+                username=username, survey_id=survey_id,
+                survey=dict(survey), questions=questions,
+                admins=admins, whitelist=whitelist,
+                info=f"El usuario '{admin_to_remove}' ha sido eliminado.", error=None)
+
+        if "add_whitelist" in request.form:
+            wl_name = request.form.get("whitelist_username", "").strip().lower()
+            wl_user = users_db.check_user(wl_name, "name")
+            if not wl_user:
+                return render_template("edit_survey.html",
+                    username=username, survey_id=survey_id,
+                    survey=dict(survey), questions=questions,
+                    admins=admins, whitelist=whitelist,
+                    error=f"El usuario '{wl_name}' no existe.", info=None)
+            
+            surveyWhitelist_db.add_to_whitelist(survey_id, wl_user["name"])
+            whitelist = surveyWhitelist_db.list_whitelist(survey_id)
+            return render_template("edit_survey.html",
+                username=username, survey_id=survey_id,
+                survey=dict(survey), questions=questions,
+                admins=admins, whitelist=whitelist,
+                info=f"El usuario '{wl_name}' añadido a la lista blanca.", error=None)
+
+        if "remove_whitelist" in request.form:
+            surveyWhitelist_db.remove_from_whitelist(survey_id, request.form.get("wl_to_remove"))
+            whitelist = surveyWhitelist_db.list_whitelist(survey_id)
+            return render_template("edit_survey.html",
+                username=username, survey_id=survey_id,
+                survey=dict(survey), questions=questions,
+                admins=admins, whitelist=whitelist,
+                info=f"El usuario '{wl_name}' ha sido eliminado de la lista blanca.", error=None)
+
         # Eliminar encuesta completa
         if "delete_survey" in request.form:
             survey_db.delete_survey(survey_id)
@@ -903,74 +1129,146 @@ def edit_survey(survey_token):
         if "cancel" in request.form:
             return redirect(url_for("home"))
     
-    return render_template("edit_survey.html", username=username, survey_id=survey_id, 
+    return render_template("edit_survey.html", username=username, survey_id=survey_id,
+        admins=admins, whitelist=whitelist,
         survey=dict(survey), questions=questions, error=None, info=None)
 
 
-# TODO Lo mismo que en edit_survey con lo del hash
 @app.route("/vote_survey/<string:survey_token>", methods=["GET", "POST"])
 def vote_survey(survey_token):
     survey_id = security.decode_survey_id(survey_token, SECRET_KEY)
     if survey_id is None:
         abort(404)
-
     if "username" not in session:
         return redirect(url_for("login"))
-    
-    username = session["username"]
-    survey = survey_db.get_survey(survey_id)
-    
+
+    username  = session["username"]
+    survey    = survey_db.get_survey(survey_id)
     if not survey:
         abort(404)
-    
-    # Generar user_hash para esta encuesta
-    user_hash = security.generate_user_hash(survey_id, username, SECRET_KEY)
-    
-    # Verificar si el usuario ya ha votado
+
+    if survey_db.is_ended(survey):
+        return redirect(url_for("survey_stats", survey_token=survey_token))
+
+    allowed, reason = check_survey_access(survey, username)
+
+    # Para encuestas con código, se verifica en la sesión o en POST
+    code_verified  = session.get(f"code_ok_{survey_id}", False)
+    needs_code_form = (survey["privacy_mode"] == "code" and
+                       not code_verified and
+                       survey["creator_id"] != username and
+                       not surveyAdmins_db.is_admin(survey_id, username))
+
+    if not allowed:
+        return render_template("vote_survey.html",
+            username=username, survey=dict(survey),
+            questions=[], options_by_question={},
+            already_voted=False, needs_code_form=False,
+            access_denied=True, access_reason=reason)
+
+    user_hash     = security.generate_user_hash(survey_id, username, SECRET_KEY)
     already_voted = submittedAnswers_db.get_user_submitted_answer(user_hash) is not None
-    
-    questions = questions_db.list_questions(survey_id)
-    options_by_question = {}
-    for q in questions:
-        options_by_question[q["id"]] = questionOptions_dn.list_options(q["id"])
-    
+    questions     = questions_db.list_questions(survey_id)
+    options_by_question  = {q["id"]: questionOptions_dn.list_options(q["id"])
+                     for q in questions}
+
     if request.method == "POST":
-        # Cancelar (volver a home)
         if "cancel" in request.form:
             return redirect(url_for("home"))
-        
-        # Al hacer clic en una opción, guardar automáticamente
-        if "vote_option" in request.form and not already_voted:
-            # Crear submitted_answer
-            demographic_group = None  # Se puede obtener de request.form si existe
-            submitted_answer_id = submittedAnswers_db.add_submitted_answer(
-                int(survey_id), user_hash, demographic_group)
-            
-            if submitted_answer_id:
-                # Guardar respuestas para cada pregunta
-                for question in questions:
-                    question_id = question["id"]
-                    option_key = f"vote_option_{question_id}"
-                    answer_value = request.form.get(option_key)
-                    
-                    if answer_value:
-                        if question["type"] in ["s", "m"]:  # single or multiple choice
-                            answers_db.add_answer(submitted_answer_id, question_id, int(answer_value), None)
-                        else:  # text or numeric
-                            answers_db.add_answer(submitted_answer_id, question_id, None, answer_value)
-                
+
+        if "enter_code" in request.form:
+            entered = request.form.get("access_code", "").strip()
+            if entered == survey["access_code"]:
+                session[f"code_ok_{survey_id}"] = True
+                needs_code_form = False
+            else:
+                return render_template("vote_survey.html",
+                    username=username, survey=dict(survey),
+                    questions=questions, options_by_question=options_by_question,
+                    already_voted=already_voted,
+                    needs_code_form=True, code_error="Código incorrecto.",
+                    access_denied=False, access_reason="")
+
+        # Votación
+        if "vote_option" in request.form and not already_voted and not needs_code_form:
+            demo_group = None
+            sub_id = submittedAnswers_db.add_submitted_answer(
+                int(survey_id), user_hash, demo_group)
+            if sub_id:
+                for q in questions:
+                    val = request.form.get(f"vote_option_{q['id']}")
+                    if val:
+                        if q["type"] in ["s", "m"]:
+                            answers_db.add_answer(sub_id, q["id"], int(val), None)
+                        else:
+                            answers_db.add_answer(sub_id, q["id"], None, val)
+
+                seal_ok = trigger_seal_for_survey(survey_id)
+                if not seal_ok:
+                    # Mensaje no bloqueante – el voto ya se guardó en BD
+                    logging.warning(f"Fallo en SEAL para encuesta {survey_id}. "
+                                    "Las estadísticas cifradas no se actualizaron.")
+                    session["seal_error"] = True
+
                 logging.info(f"{username} votó en encuesta {survey_id}.")
                 return redirect(url_for("home"))
     
     return render_template("vote_survey.html", 
-        username=username, 
-        survey_id=survey_id, 
-        survey=dict(survey),
-        questions=questions,
+        username=username, survey_id=survey_id, 
+        survey=dict(survey), questions=questions,
         options_by_question=options_by_question,
         already_voted=already_voted,
+        needs_code_form=needs_code_form,
+        access_denied=False,
+        access_reason="",
+        code_error=None,
         error=None)
 
+@app.route("/stats/<string:survey_token>")
+def survey_stats(survey_token):
+    survey_id = security.decode_survey_id(survey_token, SECRET_KEY)
+    if survey_id is None:
+        abort(404)
+    if "username" not in session:
+        return redirect(url_for("login"))
+
+    username = session["username"]
+    survey   = survey_db.get_survey(survey_id)
+    if not survey:
+        abort(404)
+
+    # Solo el creador, admins o (encuesta pública y cualquier usuario)
+    is_creator = survey["creator_id"] == username
+    is_admin   = surveyAdmins_db.is_admin(survey_id, username)
+    is_public  = survey["is_public"] == 'y'
+    if not (is_creator or is_admin or is_public):
+        abort(403)
+
+    questions     = load_questions_with_options(survey_id)
+    total_votes   = survey_db.get_vote_count(survey_id)
+    option_counts = survey_db.get_option_counts(survey_id)
+
+    # Estadísticas por pregunta
+    q_stats = []
+    for q in questions:
+        entry = {"question": q, "type": q["type"]}
+        if q["type"] in ("s", "m"):
+            counts = {o["id"]: option_counts.get(o["id"], 0)
+                      for o in q["options"]}
+            entry["option_counts"] = counts
+        elif q["type"] == "n":
+            entry["numeric"] = survey_db.get_numeric_stats(survey_id, q["id"])
+        elif q["type"] == "t":
+            entry["texts"] = survey_db.get_text_answers(survey_id, q["id"])
+        q_stats.append(entry)
+
+    return render_template("statistics.html",
+        survey      = dict(survey),
+        total_votes = total_votes,
+        q_stats     = q_stats,
+        is_creator  = is_creator,
+        is_admin    = is_admin,
+    )
 
 if __name__ == "__main__":
     # Para muestra en la defensa se ha creado un certificado autofirmado para que la web aparezca como insegura

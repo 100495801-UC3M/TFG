@@ -9,198 +9,313 @@
     <script src="{{ url_for('static', filename='js/scripts.js') }}"></script>
 </head>
 <body>
-    <div class="container">
-        <h1>Editar Encuesta</h1>
-        
-        {% if error %}
-            <div class="error">{{ error }}</div>
-        {% endif %}
-        
-        {% if info %}
-            <div class="info">{{ info }}</div>
-        {% endif %}
+<div class="container">
+    <h1>Editar Encuesta</h1>
 
-        <!-- Información de la encuesta -->
-        <div class="survey-info">
-            <h3>{{ survey.title }}</h3>
-            <p>{{ survey.description }}</p>
-            <p><small>Creada: {{ survey.created_at }}</small></p>
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    {% if info  %}<div class="info">{{ info }}</div>{% endif %}
+
+    <!-- Info encuesta -->
+    <div class="survey-info">
+        <h3>{{ survey.title }}</h3>
+        <p>{{ survey.description }}</p>
+        <p><small>Creada: {{ survey.created_at }}</small></p>
+        {% if survey.privacy_mode and survey.privacy_mode != 'public' %}
+            <p style="margin-top:8px;">
+                🔒 <strong>Privacidad actual:</strong>
+                {% if survey.privacy_mode == 'whitelist' %}Lista blanca
+                {% elif survey.privacy_mode == 'code' %}
+                    Código de acceso: <code style="background:#eee;padding:2px 8px;border-radius:4px;">
+                        {{ survey.access_code }}</code>
+                {% endif %}
+            </p>
+        {% endif %}
+    </div>
+
+    <!-- ── Editar fechas y visibilidad (TODO 2) ────────────────────────── -->
+    <h2>Editar Fechas y Visibilidad</h2>
+    <form method="POST">
+        <div class="form-group">
+            <label for="start_at">Fecha de Inicio</label>
+            <input type="datetime-local" id="start_at" name="start_at"
+                   value="{{ survey.start_at or '' }}">
+        </div>
+        <div class="form-group">
+            <label for="end_at">Fecha de Fin</label>
+            <input type="datetime-local" id="end_at" name="end_at"
+                   value="{{ survey.end_at or '' }}">
         </div>
 
-        <!-- Editar fechas de la encuesta -->
-        <h2>Editar Fechas</h2>
-        <form method="POST">
-            <div class="form-group">
-                <label for="start_at">Fecha de Inicio</label>
-                <input type="datetime-local" id="start_at" name="start_at" value="{{ survey.start_at }}">
-            </div>
+        <!-- TODO 2: Selector de visibilidad -->
+        <div class="form-group">
+            <label for="visibility">Visibilidad</label>
+            <select id="visibility" name="visibility">
+                <option value="y"
+                    {% if survey.is_public == 'y' %}selected{% endif %}>
+                    🌐 Pública
+                </option>
+                <option value="whitelist"
+                    {% if survey.privacy_mode == 'whitelist' %}selected{% endif %}>
+                    👥 Privada – Lista blanca
+                </option>
+                <option value="code"
+                    {% if survey.privacy_mode == 'code' %}selected{% endif %}>
+                    🔑 Privada – Código de acceso
+                    {% if survey.privacy_mode == 'code' and survey.access_code %}
+                        (actual: {{ survey.access_code }})
+                    {% endif %}
+                </option>
+            </select>
+            <small style="display:block;margin-top:6px;color:#666;">
+                Cambiar a <em>Código</em> generará un código nuevo automáticamente.
+                La lista blanca se gestiona en la sección inferior.
+            </small>
+        </div>
 
-            <div class="form-group">
-                <label for="end_at">Fecha de Fin</label>
-                <input type="datetime-local" id="end_at" name="end_at" value="{{ survey.end_at }}">
-            </div>
+        <button type="submit" name="edit_survey" value="edit_survey" class="primary">
+            Actualizar fechas y visibilidad
+        </button>
+    </form>
 
-            <div class="form-group">
-                <label for="is_public">Visibilidad</label>
-                <select id="is_public" name="is_public">
-                    <option value="y" {% if survey.is_public == 'y' %}selected{% endif %}>Pública</option>
-                    <option value="n" {% if survey.is_public == 'n' %}selected{% endif %}>Privada</option>
-                </select>
-            </div>
+    <!-- ── TODO 2: Gestión de Lista Blanca ────────────────────────────── -->
+    {% if survey.privacy_mode == 'whitelist' %}
+        <div style="background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;
+                    padding:16px;margin:24px 0;">
+            <h2 style="margin:0 0 12px;">👥 Lista Blanca</h2>
 
-            <button type="submit" name="edit_survey" value="edit_survey" class="primary">
-                Actualizar fechas o si es público
-            </button>
+            {% if whitelist %}
+                <ul style="margin:0 0 12px;padding-left:20px;">
+                    {% for entry in whitelist %}
+                        <li style="margin-bottom:6px;">
+                            {{ entry.user_id }}
+                            <form method="POST" style="display:inline;margin-left:8px;">
+                                <input type="hidden" name="wl_to_remove" value="{{ entry.user_id }}">
+                                <button type="submit" name="remove_whitelist" class="danger"
+                                        style="padding:2px 8px;min-width:auto;font-size:.8rem;"
+                                        onclick="return confirm('¿Quitar de la lista blanca?');">
+                                    ✕
+                                </button>
+                            </form>
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p style="color:#555;margin:0 0 12px;">
+                    La lista blanca está vacía. Nadie puede votar todavía (excepto admins y el creador).
+                </p>
+            {% endif %}
+
+            <form method="POST" style="display:flex;gap:8px;align-items:center;">
+                <input type="text" name="whitelist_username"
+                       placeholder="Nombre de usuario..." style="flex:1;max-width:280px;">
+                <button type="submit" name="add_whitelist" class="primary"
+                        style="min-width:auto;">+ Añadir</button>
+            </form>
+        </div>
+    {% endif %}
+
+    <!-- ── TODO 6: Gestión de Admins ──────────────────────────────────── -->
+    <div style="background:#f3f0ff;border:1px solid #d0c7ff;border-radius:8px;
+                padding:16px;margin:24px 0;">
+        <h2 style="margin:0 0 12px;">👤 Admins de la encuesta</h2>
+
+        {% if admins %}
+            <ul style="margin:0 0 12px;padding-left:20px;">
+                {% for a in admins %}
+                    <li style="margin-bottom:6px;">
+                        {{ a.user_id }}
+                        <form method="POST" style="display:inline;margin-left:8px;">
+                            <input type="hidden" name="admin_to_remove" value="{{ a.user_id }}">
+                            <button type="submit" name="remove_admin" class="danger"
+                                    style="padding:2px 8px;min-width:auto;font-size:.8rem;"
+                                    onclick="return confirm('¿Eliminar admin?');">✕</button>
+                        </form>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p style="color:#888;margin:0 0 12px;">No hay admins asignados todavía.</p>
+        {% endif %}
+
+        <form method="POST" style="display:flex;gap:8px;align-items:center;">
+            <input type="text" name="admin_username"
+                   placeholder="Nombre de usuario..." style="flex:1;max-width:280px;">
+            <button type="submit" name="add_admin" class="primary"
+                    style="min-width:auto;">+ Añadir admin</button>
         </form>
+    </div>
 
-        <!-- Agregar Pregunta -->
-        <h2>Agregar Pregunta</h2>
-        <form method="POST">
-            <div class="form-group">
-                <label for="question_title">Pregunta</label>
-                <input type="text" id="question_title" name="question_title">
+    <!-- ── Agregar pregunta ────────────────────────────────────────────── -->
+    <h2>Agregar Pregunta</h2>
+    <form method="POST">
+        <div class="form-group">
+            <label for="question_title">Pregunta</label>
+            <input type="text" id="question_title" name="question_title">
+        </div>
+        <div class="form-group">
+            <label for="question_type">Tipo de Pregunta *</label>
+            <select id="question_type" name="question_type" onchange="toggleOptions()">
+                <option value="t">Texto abierto</option>
+                <option value="n">Numérico</option>
+                <option value="s">Opción única</option>
+                <option value="m">Opción múltiple</option>
+            </select>
+        </div>
+        <div class="form-group" id="options-group" style="display:none;">
+            <label>Opciones</label>
+            <div id="options-container">
+                <input type="text" name="options[]" class="option-input" placeholder="Opción 1">
             </div>
+            <button type="button" onclick="addOption()" class="secondary"
+                    style="margin-top:10px;">+ Agregar Opción</button>
+        </div>
+        <div class="form-group">
+            <label>
+                <input type="checkbox" name="is_demographic">
+                ¿Es una pregunta demográfica?
+            </label>
+        </div>
+        <button type="submit" name="add_question" value="add_question" class="primary"
+                onclick="return validateQuestionTitle();">
+            Agregar Pregunta
+        </button>
+        <button type="submit" name="cancel" value="cancel" class="secondary">
+            Volver a Inicio
+        </button>
+    </form>
 
-            <div class="form-group">
-                <label for="question_type">Tipo de Pregunta *</label>
-                <select id="question_type" name="question_type" onchange="toggleOptions()">
-                    <option value="t">Texto abierto</option>
-                    <option value="n">Numérico</option>
-                    <option value="s">Opción única</option>
-                    <option value="m">Opción múltiple</option>
-                </select>
+    <!-- ── Listado de preguntas ────────────────────────────────────────── -->
+    {% if questions %}
+        <div class="question-list">
+            <h2>Preguntas de la Encuesta ({{ questions|length }})</h2>
+            <p style="color:#666;font-size:14px;">💡 Arrastra las preguntas para reordenarlas</p>
+            <div id="questions-container">
+                {% for question in questions %}
+                    <div class="question-item" draggable="true"
+                         data-question-id="{{ question.id }}" style="cursor:grab;">
+
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;"
+                             onclick="toggleEditQuestion({{ question.id }})">
+                            <div style="flex-grow:1;cursor:pointer;">
+                                <h4>#{{ loop.index }} - {{ question.title }}</h4>
+                                <p><strong>Tipo:</strong>
+                                    {% if question.type == 't' %}Texto abierto
+                                    {% elif question.type == 'n' %}Numérico
+                                    {% elif question.type == 's' %}Opción única
+                                    {% elif question.type == 'm' %}Opción múltiple
+                                    {% endif %}
+                                </p>
+                                {% if question.is_demographic %}
+                                    <p><strong style="color:#28a745;">● Pregunta Demográfica</strong></p>
+                                {% endif %}
+                            </div>
+                            <button type="button" class="secondary"
+                                    style="margin-left:10px;width:auto;cursor:pointer;"
+                                    onclick="event.stopPropagation();
+                                             toggleEditQuestion({{ question.id }});return false;">
+                                ✏️ Editar
+                            </button>
+                        </div>
+
+                        {% if question.type in ('s','m') %}
+                            <div style="margin-top:10px;padding-left:20px;border-left:3px solid #007bff;">
+                                <p><strong>Opciones:</strong></p>
+                                <ul style="margin:5px 0;padding-left:20px;">
+                                    {% for option in question.options or [] %}
+                                        <li>{{ option.option_text }}</li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        {% endif %}
+
+                        <div id="edit-form-{{ question.id }}" class="edit-section"
+                             style="display:none;margin-top:15px;">
+                            <form method="POST">
+                                <input type="hidden" name="question_id" value="{{ question.id }}">
+                                <div class="form-group">
+                                    <label>Título:</label>
+                                    <input type="text" name="edit_question_title"
+                                           value="{{ question.title }}" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Tipo:</label>
+                                    <select id="edit-type-{{ question.id }}"
+                                            name="edit_question_type"
+                                            onchange="toggleEditOptions({{ question.id }})">
+                                        <option value="t" {% if question.type=='t' %}selected{% endif %}>Texto abierto</option>
+                                        <option value="n" {% if question.type=='n' %}selected{% endif %}>Numérico</option>
+                                        <option value="s" {% if question.type=='s' %}selected{% endif %}>Opción única</option>
+                                        <option value="m" {% if question.type=='m' %}selected{% endif %}>Opción múltiple</option>
+                                    </select>
+                                </div>
+                                <div id="edit-options-group-{{ question.id }}" class="form-group"
+                                     style="display:{% if question.type in ('s','m') %}block{% else %}none{% endif %};">
+                                    <label>Opciones:</label>
+                                    <div id="edit-options-container-{{ question.id }}">
+                                        {% for option in question.options or [] %}
+                                            <div style="display:flex;gap:8px;margin-bottom:8px;">
+                                                <input type="text" name="edit_options[]"
+                                                       value="{{ option.option_text }}"
+                                                       style="flex-grow:1;">
+                                                <input type="hidden" name="edit_option_ids[]"
+                                                       value="{{ option.id }}">
+                                                <button type="button" class="secondary"
+                                                        onclick="removeEditOption(this)"
+                                                        style="width:auto;">✕</button>
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                    <button type="button"
+                                            onclick="addEditOption({{ question.id }})"
+                                            class="secondary" style="margin-top:10px;">
+                                        + Agregar Opción
+                                    </button>
+                                </div>
+                                <div class="form-group">
+                                    <label>
+                                        <input type="checkbox" name="edit_is_demographic"
+                                               {% if question.is_demographic %}checked{% endif %}>
+                                        ¿Es una pregunta demográfica?
+                                    </label>
+                                </div>
+                                <div class="form-group">
+                                    <button type="submit" name="update_question" class="primary">
+                                        Actualizar
+                                    </button>
+                                    <button type="button" class="secondary"
+                                            onclick="toggleEditQuestion({{ question.id }})">
+                                        Cancelar
+                                    </button>
+                                    <button type="submit" name="delete_question" class="danger"
+                                            onclick="return confirm('¿Eliminar esta pregunta?');">
+                                        Eliminar
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                {% endfor %}
             </div>
+        </div>
+    {% endif %}
 
-            <div class="form-group" id="options-group" style="display: none;">
-                <label>Opciones</label>
-                <div id="options-container">
-                    <input type="text" name="options[]" class="option-input" placeholder="Opción 1">
-                </div>
-                <button type="button" onclick="addOption()" class="secondary" style="margin-top: 10px;">
-                    + Agregar Opción
-                </button>
-            </div>
-
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" name="is_demographic">
-                    ¿Es una pregunta demográfica?
-                </label>
-            </div>
-
-            <button type="submit" name="add_question" value="add_question" class="primary" onclick="return validateQuestionTitle();">
-                Agregar Pregunta
+    <!-- Botones finales -->
+    <div style="margin-top:30px;border-top:1px solid #ddd;padding-top:20px;">
+        <!-- TODO 3: Botón de estadísticas -->
+        <button class="secondary"
+                onclick="window.location.href='/stats/{{ encode_survey_id(survey.id) }}'">
+            📊 Ver Estadísticas
+        </button>
+        <form method="POST" style="display:inline;margin-left:8px;">
+            <button type="submit" name="delete_survey" value="delete_survey" class="danger"
+                    onclick="return confirm('¿Eliminar esta encuesta completamente?');">
+                Eliminar Encuesta
             </button>
             <button type="submit" name="cancel" value="cancel" class="secondary">
                 Volver a Inicio
             </button>
         </form>
-
-        <!-- Listado de preguntas de la encuesta -->
-        {% if questions %}
-            <div class="question-list">
-                <h2>Preguntas de la Encuesta ({{ questions|length }})</h2>
-                <p style="color: #666; font-size: 14px;">💡 Arrastra las preguntas para reordenarlas</p>
-                <div id="questions-container">
-                    {% for question in questions %}
-                        <div class="question-item" draggable="true" data-question-id="{{ question.id }}" style="cursor: grab;">
-                            <div style="display: flex; justify-content: space-between; align-items: flex-start;" onclick="toggleEditQuestion({{ question.id }})">
-                                <div style="flex-grow: 1; cursor: pointer;">
-                                    <h4>#{{ loop.index }} - {{ question.title }}</h4>
-                                    <p><strong>Tipo:</strong> 
-                                        {% if question.type == 't' %}Texto abierto
-                                        {% elif question.type == 'n' %}Numérico
-                                        {% elif question.type == 's' %}Opción única
-                                        {% elif question.type == 'm' %}Opción múltiple
-                                        {% endif %}
-                                    </p>
-                                    {% if question.is_demographic %}
-                                        <p><strong style="color: #28a745;">● Pregunta Demográfica</strong></p>
-                                    {% endif %}
-                                </div>
-                                <button type="button" class="secondary" style="margin-left: 10px; width: auto; cursor: pointer;" onclick="event.stopPropagation(); toggleEditQuestion({{ question.id }}); return false;">✏️ Editar</button>
-                            </div>
-                            
-                            <!-- Mostrar opciones si existen -->
-                            {% if question.type in ('s', 'm') %}
-                                <div style="margin-top: 10px; padding-left: 20px; border-left: 3px solid #007bff;">
-                                    <p><strong>Opciones:</strong></p>
-                                    <ul style="margin: 5px 0; padding-left: 20px;">
-                                        {% for option in question.options or [] %}
-                                            <li>{{ option.option_text }}</li>
-                                        {% endfor %}
-                                    </ul>
-                                </div>
-                            {% endif %}
-                            
-                            <!-- Formulario de edición oculto -->
-                            <div id="edit-form-{{ question.id }}" class="edit-section" style="display: none; margin-top: 15px;">
-                                <form method="POST" style="margin: 0;">
-                                    <input type="hidden" name="question_id" value="{{ question.id }}">
-                                    
-                                    <div class="form-group">
-                                        <label for="edit-title-{{ question.id }}">Título:</label>
-                                        <input type="text" id="edit-title-{{ question.id }}" name="edit_question_title" value="{{ question.title }}" required>
-                                    </div>
-                                    
-                                    <div class="form-group">
-                                        <label for="edit-type-{{ question.id }}">Tipo:</label>
-                                        <select id="edit-type-{{ question.id }}" name="edit_question_type" onchange="toggleEditOptions({{ question.id }})">
-                                            <option value="t" {% if question.type == 't' %}selected{% endif %}>Texto abierto</option>
-                                            <option value="n" {% if question.type == 'n' %}selected{% endif %}>Numérico</option>
-                                            <option value="s" {% if question.type == 's' %}selected{% endif %}>Opción única</option>
-                                            <option value="m" {% if question.type == 'm' %}selected{% endif %}>Opción múltiple</option>
-                                        </select>
-                                    </div>
-                                    
-                                    <!-- Opciones editables -->
-                                    <div id="edit-options-group-{{ question.id }}" class="form-group" style="display: {% if question.type in ('s', 'm') %}block{% else %}none{% endif %};">
-                                        <label>Opciones:</label>
-                                        <div id="edit-options-container-{{ question.id }}">
-                                            {% for option in question.options or [] %}
-                                                <div style="display: flex; gap: 8px; margin-bottom: 8px;">
-                                                    <input type="text" name="edit_options[]" class="option-input" value="{{ option.option_text }}" style="flex-grow: 1;">
-                                                    <input type="hidden" name="edit_option_ids[]" value="{{ option.id }}">
-                                                    <button type="button" class="secondary" onclick="removeEditOption(this)" style="width: auto;">✕</button>
-                                                </div>
-                                            {% endfor %}
-                                        </div>
-                                        <button type="button" onclick="addEditOption({{ question.id }})" class="secondary" style="margin-top: 10px;">
-                                            + Agregar Opción
-                                        </button>
-                                    </div>
-                                    
-                                    <div class="form-group">
-                                        <label>
-                                            <input type="checkbox" name="edit_is_demographic" {% if question.is_demographic %}checked{% endif %}>
-                                            ¿Es una pregunta demográfica?
-                                        </label>
-                                    </div>
-                                    
-                                    <div class="form-group">
-                                        <button type="submit" name="update_question" class="primary">Actualizar</button>
-                                        <button type="button" class="secondary" onclick="toggleEditQuestion({{ question.id }})">Cancelar</button>
-                                        <button type="submit" name="delete_question" class="danger" onclick="return confirm('¿Eliminar esta pregunta?');">Eliminar</button>
-                                    </div>
-                                </form>
-                            </div>
-                        </div>
-                    {% endfor %}
-                </div>
-            </div>
-        {% endif %}
-
-        <!-- Botones finales -->
-        <div style="margin-top: 30px; border-top: 1px solid #ddd; padding-top: 20px;">
-            <form method="POST" style="display: inline;">
-                <button type="submit" name="delete_survey" value="delete_survey" class="danger" onclick="return confirm('¿Eliminar esta encuesta completamente?');">
-                    Eliminar Encuesta
-                </button>
-                <button type="submit" name="cancel" value="cancel" class="secondary">
-                    Volver a Inicio
-                </button>
-            </form>
-        </div>
     </div>
+</div>
 </body>
 </html>
