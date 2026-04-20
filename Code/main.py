@@ -69,6 +69,7 @@ cliente_seal = Cliente()
 
 app.jinja_env.globals["encode_survey_id"] = lambda sid: security.encode_survey_id(sid, SECRET_KEY)
 app.jinja_env.globals["survey_is_ended"] = survey_db.is_ended
+app.jinja_env.globals["survey_not_started"] = lambda survey: not survey_db.is_started(survey)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -351,18 +352,34 @@ def home():
             
             return redirect(url_for("home"))
  
+    # ── Paginación ────────────────────────────────────
+    ITEMS_PER_PAGE = 5
+    page_my = max(1, int(request.args.get("page_my", 1)))
+    page_admin = max(1, int(request.args.get("page_admin", 1)))
+    page_search = max(1, int(request.args.get("page_search", 1)))
+    
     # ── Datos para el template ────────────────────────────────────
-    user_surveys  = survey_db.get_user_surveys(username)
-    admin_surveys = survey_db.get_surveys_as_admin(username)
+    # Mis encuestas
+    total_user_surveys = survey_db.count_user_surveys(username)
+    total_pages_my = (total_user_surveys + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE
+    user_surveys = survey_db.get_user_surveys(username, limit=ITEMS_PER_PAGE, offset=(page_my-1)*ITEMS_PER_PAGE)
+    
+    # Encuestas donde soy admin
+    total_admin_surveys = survey_db.count_surveys_as_admin(username)
+    total_pages_admin = (total_admin_surveys + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE
+    admin_surveys = survey_db.get_surveys_as_admin(username, limit=ITEMS_PER_PAGE, offset=(page_admin-1)*ITEMS_PER_PAGE)
  
     found         = session.get("found")
     user_searched = session.get("user_searched")
     found_surveys = []
     voted_ids     = set()
     message       = session.pop("message", None)
- 
+    total_pages_search = 1
+    
     if found and user_searched:
-        found_surveys = survey_db.get_public_surveys(user_searched)
+        total_found_surveys = survey_db.count_public_surveys(user_searched)
+        total_pages_search = (total_found_surveys + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE
+        found_surveys = survey_db.get_public_surveys(user_searched, limit=ITEMS_PER_PAGE, offset=(page_search-1)*ITEMS_PER_PAGE)
         if not found_surveys:
             message = f"El usuario '{user_searched}' no tiene encuestas públicas."
         # Marcar qué encuestas ya ha votado el usuario actual
@@ -383,6 +400,13 @@ def home():
         found_surveys = found_surveys,
         voted_ids     = voted_ids,
         message       = message,
+        # Datos de paginación
+        page_my = page_my,
+        page_admin = page_admin,
+        page_search = page_search,
+        total_pages_my = total_pages_my,
+        total_pages_admin = total_pages_admin,
+        total_pages_search = total_pages_search,
     )
 
 

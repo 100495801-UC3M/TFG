@@ -1,17 +1,3 @@
-1. Hacer que la siguiente función:
-    1. La función "Enviar encuestas al servidor" hace lo siguiente:
-    Recibe de parámetros la lista sin cifrar y la lista cifrada de la base de datos.
-    2. Transforma la lista de respuestas a una lista cifradas, ya que la de la base de datos ebería estar cifrada ya.
-        (Cuando se crea la lista, o no debe haber nada o debe haber un 0)
-    3. Coger ambas listas y transmitirlas al servidor con el comando (de momento que sean suma y media)
-    4. Recibir la lista de respuestas y colocarlas en el servidor de nuevo. Returnear True si funcionó, False si no.
-    5. Si false, decir "ha habido un error, espera un segundo".
-
-2. Al seleccionar privada, que den dos opciones. O añadir una whitelist de personas que pueden acceder o un codigo
-con el que buscar en el buscador y poder acceder a dicha encuesta
-3. Que en el home se puedan ver las estadísticas de las encuestas, de momento que solo sea un botón.
-Además, las estadísticas públicas deben tener este botón.
-4. Que al buscar una encuesta, si se ha acabado, que solo se pueda acceder a las estadísticas.
-Es decir, la encuesta debe aparecer pero no se puede votar.
-5. Que aparezca un listado de encuestas en las que eres admin debajo de mis encuestas
-6. Que, al crear o editar una encuesta, se puedan añadir o quitar admins.
+Falta probar flujos de trabajo
+Limpiar codigo
+Añadir funciones que pueda separar de main a survey_helpers

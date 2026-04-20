@@ -65,6 +65,7 @@
                 <div class="survey-grid">
                     {% for survey in found_surveys %}
                         {% set ended = survey_is_ended(survey) %}
+                        {% set not_started = survey_not_started(survey) %}
                         <div class="survey-card {% if ended %}survey-ended{% endif %}">
                             <div style="display:flex;justify-content:space-between;align-items:start;">
                                 <div style="flex-grow:1;">
@@ -72,12 +73,17 @@
                                         {{ survey.title }}
                                         {% if ended %}
                                             <span class="badge-ended">✓ Finalizada</span>
+                                        {% elif not_started %}
+                                            <span class="badge-pending">⏳ Próximamente</span>
                                         {% endif %}
                                     </h3>
                                     <p class="description">{{ survey.description }}</p>
                                     <p><small>Creada: {{ survey.created_at }}</small></p>
+                                    {% if survey.start_at %}
+                                        <p><small>📅 Válida desde: {{ survey.start_at }}</small></p>
+                                    {% endif %}
                                     {% if survey.end_at %}
-                                        <p><small>Fin: {{ survey.end_at }}</small></p>
+                                        <p><small>📅 Válida hasta: {{ survey.end_at }}</small></p>
                                     {% endif %}
                                 </div>
                                 {% if survey.id in voted_ids %}
@@ -90,6 +96,11 @@
                                     <!-- TODO 4: Encuesta terminada → solo estadísticas -->
                                     <button onclick="window.location.href='/stats/{{ encode_survey_id(survey.id) }}'">
                                         📊 Ver Estadísticas
+                                    </button>
+                                {% elif not_started %}
+                                    <button disabled
+                                            style="background-color:#ccc;cursor:not-allowed;">
+                                        Próximamente
                                     </button>
                                 {% elif survey.id in voted_ids %}
                                     <button disabled
@@ -110,6 +121,19 @@
                         </div>
                     {% endfor %}
                 </div>
+                
+                <!-- Paginación de búsqueda -->
+                {% if total_pages_search > 1 %}
+                    <div class="pagination">
+                        {% if page_search > 1 %}
+                            <a href="{{ url_for('home', page_my=page_my, page_admin=page_admin, page_search=page_search-1) }}" class="pagination-btn">← Anterior</a>
+                        {% endif %}
+                        <span class="pagination-info">Página {{ page_search }} de {{ total_pages_search }}</span>
+                        {% if page_search < total_pages_search %}
+                            <a href="{{ url_for('home', page_my=page_my, page_admin=page_admin, page_search=page_search+1) }}" class="pagination-btn">Siguiente →</a>
+                        {% endif %}
+                    </div>
+                {% endif %}
             {% else %}
                 <div class="no-surveys"><p>No hay encuestas disponibles.</p></div>
             {% endif %}
@@ -129,15 +153,24 @@
             <div class="survey-grid">
                 {% for survey in user_surveys %}
                     {% set ended = survey_is_ended(survey) %}
+                    {% set not_started = survey_not_started(survey) %}
                     <div class="survey-card {% if ended %}survey-ended{% endif %}">
                         <h3>
                             {{ survey.title }}
                             {% if ended %}
                                 <span class="badge-ended">✓ Finalizada</span>
+                            {% elif not_started %}
+                                <span class="badge-pending">⏳ Próximamente</span>
                             {% endif %}
                         </h3>
                         <p class="description">{{ survey.description }}</p>
                         <p><small>Creada: {{ survey.created_at }}</small></p>
+                        {% if survey.start_at %}
+                            <p><small>📅 Válida desde: {{ survey.start_at }}</small></p>
+                        {% endif %}
+                        {% if survey.end_at %}
+                            <p><small>📅 Válida hasta: {{ survey.end_at }}</small></p>
+                        {% endif %}
                         {% if survey.privacy_mode and survey.privacy_mode != 'public' %}
                             <p><small>
                                 🔒 {% if survey.privacy_mode == 'whitelist' %}Lista blanca
@@ -166,6 +199,19 @@
                     </div>
                 {% endfor %}
             </div>
+            
+            <!-- Paginación de Mis Encuestas -->
+            {% if total_pages_my > 1 %}
+                <div class="pagination">
+                    {% if page_my > 1 %}
+                        <a href="{{ url_for('home', page_my=page_my-1, page_admin=page_admin, page_search=page_search) }}" class="pagination-btn">← Anterior</a>
+                    {% endif %}
+                    <span class="pagination-info">Página {{ page_my }} de {{ total_pages_my }}</span>
+                    {% if page_my < total_pages_my %}
+                        <a href="{{ url_for('home', page_my=page_my+1, page_admin=page_admin, page_search=page_search) }}" class="pagination-btn">Siguiente →</a>
+                    {% endif %}
+                </div>
+            {% endif %}
         {% else %}
             <div class="no-surveys">
                 <p>No has creado ninguna encuesta todavía.</p>
@@ -180,17 +226,26 @@
             <div class="survey-grid">
                 {% for survey in admin_surveys %}
                     {% set ended = survey_is_ended(survey) %}
+                    {% set not_started = survey_not_started(survey) %}
                     <div class="survey-card {% if ended %}survey-ended{% endif %}"
                          style="border-left:4px solid #6f42c1;">
                         <h3>
                             {{ survey.title }}
                             {% if ended %}
                                 <span class="badge-ended">✓ Finalizada</span>
+                            {% elif not_started %}
+                                <span class="badge-pending">⏳ Próximamente</span>
                             {% endif %}
                         </h3>
                         <p class="description">{{ survey.description }}</p>
                         <p><small>Creador: {{ survey.creator_id }}</small></p>
                         <p><small>Creada: {{ survey.created_at }}</small></p>
+                        {% if survey.start_at %}
+                            <p><small>📅 Válida desde: {{ survey.start_at }}</small></p>
+                        {% endif %}
+                        {% if survey.end_at %}
+                            <p><small>📅 Válida hasta: {{ survey.end_at }}</small></p>
+                        {% endif %}
 
                         <div class="button-group">
                             <button onclick="window.location.href='/edit_survey/{{ encode_survey_id(survey.id) }}'">
@@ -204,6 +259,19 @@
                     </div>
                 {% endfor %}
             </div>
+            
+            <!-- Paginación de Admin Surveys -->
+            {% if total_pages_admin > 1 %}
+                <div class="pagination">
+                    {% if page_admin > 1 %}
+                        <a href="{{ url_for('home', page_my=page_my, page_admin=page_admin-1, page_search=page_search) }}" class="pagination-btn">← Anterior</a>
+                    {% endif %}
+                    <span class="pagination-info">Página {{ page_admin }} de {{ total_pages_admin }}</span>
+                    {% if page_admin < total_pages_admin %}
+                        <a href="{{ url_for('home', page_my=page_my, page_admin=page_admin+1, page_search=page_search) }}" class="pagination-btn">Siguiente →</a>
+                    {% endif %}
+                </div>
+            {% endif %}
         </div>
     {% endif %}
 

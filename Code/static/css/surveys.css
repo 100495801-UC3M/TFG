@@ -438,6 +438,50 @@ button:disabled {
     white-space: nowrap;
     margin-left: 8px;
 }
+
+.badge-pending {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #fff3e0;
+    color: #e65100;
+    border: 1px solid #ffe0b2;
+    border-radius: 20px;
+    padding: 2px 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+    margin-left: 8px;
+}
+
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    margin-top: 16px;
+    padding: 12px 0;
+}
+
+.pagination-btn {
+    display: inline-block;
+    padding: 8px 12px;
+    background: #007bff;
+    color: white;
+    text-decoration: none;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    transition: background 0.2s;
+}
+
+.pagination-btn:hover {
+    background: #0056b3;
+}
+
+.pagination-info {
+    font-size: 0.9rem;
+    color: #666;
+}
  
 .survey-ended {
     opacity: 0.80;

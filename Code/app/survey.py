@@ -184,22 +184,65 @@ class Survey:
             JOIN survey_admin ON survey.id = survey_admin.survey_id
             WHERE survey_admin.user_id = ?""", (user_id,)).fetchall()
     
-    def get_user_surveys(self, username):
+    def get_user_surveys(self, username, limit=None, offset=0):
+        """Obtiene encuestas del usuario con paginación opcional."""
+        if limit:
+            return self.cursor.execute(
+                "SELECT * FROM survey WHERE creator_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?", 
+                (username, limit, offset)).fetchall()
         return self.cursor.execute(
-            "SELECT * FROM survey WHERE creator_id = ?", (username,)).fetchall()
-    
-    def get_public_surveys(self, username):
-        return self.cursor.execute(
-            "SELECT * FROM survey WHERE creator_id = ? AND is_public = 'y'",
+            "SELECT * FROM survey WHERE creator_id = ? ORDER BY created_at DESC", 
             (username,)).fetchall()
+    
+    def count_user_surveys(self, username):
+        """Cuenta total de encuestas del usuario."""
+        result = self.cursor.execute(
+            "SELECT COUNT(*) as count FROM survey WHERE creator_id = ?", 
+            (username,)).fetchone()
+        return result["count"]
+    
+    def get_public_surveys(self, username, limit=None, offset=0):
+        """Obtiene encuestas públicas de un usuario con paginación opcional."""
+        if limit:
+            return self.cursor.execute(
+                "SELECT * FROM survey WHERE creator_id = ? AND is_public = 'y' ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                (username, limit, offset)).fetchall()
+        return self.cursor.execute(
+            "SELECT * FROM survey WHERE creator_id = ? AND is_public = 'y' ORDER BY created_at DESC",
+            (username,)).fetchall()
+    
+    def count_public_surveys(self, username):
+        """Cuenta total de encuestas públicas de un usuario."""
+        result = self.cursor.execute(
+            "SELECT COUNT(*) as count FROM survey WHERE creator_id = ? AND is_public = 'y'", 
+            (username,)).fetchone()
+        return result["count"]
 
-    def get_surveys_as_admin(self, username):
+    def get_surveys_as_admin(self, username, limit=None, offset=0):
         """Encuestas en las que el usuario es admin (pero no el creador)."""
+        if limit:
+            return self.cursor.execute("""
+                SELECT survey.* FROM survey
+                JOIN survey_admin ON survey.id = survey_admin.survey_id
+                WHERE survey_admin.user_id = ? AND survey.creator_id != ?
+                ORDER BY survey.created_at DESC
+                LIMIT ? OFFSET ?
+            """, (username, username, limit, offset)).fetchall()
         return self.cursor.execute("""
             SELECT survey.* FROM survey
             JOIN survey_admin ON survey.id = survey_admin.survey_id
             WHERE survey_admin.user_id = ? AND survey.creator_id != ?
+            ORDER BY survey.created_at DESC
         """, (username, username)).fetchall()
+    
+    def count_surveys_as_admin(self, username):
+        """Cuenta total de encuestas donde el usuario es admin."""
+        result = self.cursor.execute("""
+            SELECT COUNT(DISTINCT survey.id) as count FROM survey
+            JOIN survey_admin ON survey.id = survey_admin.survey_id
+            WHERE survey_admin.user_id = ? AND survey.creator_id != ?
+        """, (username, username)).fetchone()
+        return result["count"]
 
     def has_voted(self, survey_id, user_hash):
         result = self.cursor.execute(
