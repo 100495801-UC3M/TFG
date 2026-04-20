@@ -11,7 +11,8 @@ from datetime import timedelta, datetime
 import app.security as security
 from app.users import Users
 from app.cppclient import Cliente
-from app.survey import Survey, SurveyAdmins, SurveyWhitelist, Questions, QuestionOptions, Answers, SubmittedAnswers, Statistics
+from app.survey import Survey, SurveyAdmins, SurveyWhitelist, Questions, QuestionOptions
+from app.survey import Answers, SubmittedAnswers, Statistics, Session_private_key, Registration_token
 from app.survey_helpers import (
     load_questions_with_options,
     parse_visibility,
@@ -33,21 +34,24 @@ app.secret_key = os.urandom(24)
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=5)
 
 # Inicializamos las bases de datos y sus tablas
-users_db            = Users()
-#messages_db        = Messages()
-survey_db           = Survey()
-surveyAdmins_db     = SurveyAdmins(survey_db.connection)
-surveyWhitelist_db  = SurveyWhitelist(survey_db.connection)
-questions_db        = Questions(survey_db.connection)
-questionOptions_dn  = QuestionOptions(survey_db.connection)
-answers_db          = Answers(survey_db.connection)
-submittedAnswers_db = SubmittedAnswers(survey_db.connection)
-statistics_db       = Statistics(survey_db.connection)
+users_db                = Users()
+#messages_db            = Messages()
+survey_db               = Survey()
+surveyAdmins_db         = SurveyAdmins(survey_db.connection)
+surveyWhitelist_db      = SurveyWhitelist(survey_db.connection)
+questions_db            = Questions(survey_db.connection)
+questionOptions_dn      = QuestionOptions(survey_db.connection)
+answers_db              = Answers(survey_db.connection)
+submittedAnswers_db     = SubmittedAnswers(survey_db.connection)
+statistics_db           = Statistics(survey_db.connection)
+session_private_key_db  = Session_private_key(survey_db.connection)
+registration_token_db   = Registration_token(survey_db.connection)
 
 
 # Inicializamos las variables globales
-pending_registrations = {}
-reset_tokens = {}
+# Nota: pending_registrations y reset_tokens ahora se almacenan en BD
+# pending_registrations = {}  # usar registration_token_db.save_registration_token()
+# reset_tokens = {}  # usar registration_token_db.save_registration_token()
 
 # Clave secreta para realizar búsquedas de elementos cifrados
 SECRET_KEY = security.load_search_secret()
@@ -55,6 +59,10 @@ SECRET_KEY = security.load_search_secret()
 
 # Configuración logging para que se muestre en la consola
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+# Limpiar tokens y sesiones expiradas al iniciar
+registration_token_db.cleanup_expired_tokens()
+session_private_key_db.cleanup_expired_sessions()
 
 # ── Cliente SEAL ──────────────────────────────────────────────────────────────
 cliente_seal = Cliente()
@@ -199,7 +207,7 @@ def register():
 
         # Generar token único con expiración de 5 minutos
         token = str(uuid.uuid4())
-        pending_registrations[token] = {
+        token_data = {
             "DNI":              dni_index,
             "DNI_search":       dni_encrypted,
             "name":             name,
@@ -208,8 +216,9 @@ def register():
             "hashed_password":  hashed_password,
             "salt":             base64.urlsafe_b64encode(salt).decode(),
             "private_key":      private_key_encrypted,
-            "expires_at":       time.time() + 300,  # 5 minutos
         }
+        expires_at = (datetime.now() + timedelta(minutes=5)).isoformat()
+        registration_token_db.save_registration_token(token, token_data, expires_at)
 
         confirm_url = f"https://localhost:5000/confirm/{token}"
 
@@ -270,9 +279,13 @@ def login():
 
                             private_key = security.decrypt_private_key(user["private_key"], password, salt)
                             private_key = security.serialize_private_key(private_key)
-                            session["private_key"] = private_key
-
+                            
                             session.permanent = True
+                            # Generar session_id único para almacenar clave privada en BD
+                            session_id = str(uuid.uuid4())
+                            session["session_id"] = session_id
+                            session_private_key_db.save_session_private_key(session_id, private_key)
+                            
                             logging.info(f"Usuario {dni_or_username_or_email} ha iniciado sesión.")
                             return redirect(url_for("home"))
                         else:
@@ -425,7 +438,14 @@ def list_messages():
     if request.method == "POST":
         message_id = request.form.get("id")
         message = messages_db.get_message(message_id)
-        private_key = security.deserialize_private_key(session["private_key"])
+        
+        # Recuperar clave privada de BD
+        session_id = session.get("session_id")
+        private_key_serialized = session_private_key_db.get_session_private_key(session_id) if session_id else None
+        if not private_key_serialized:
+            abort(401)  # No autorizado
+        
+        private_key = security.deserialize_private_key(private_key_serialized)
 
         user = users_db.check_user(session["username"], "name")
         route = user["certificate"]
@@ -570,15 +590,17 @@ def oauth2callback():
 
 @app.route("/confirm/<token>")
 def confirm_register(token):
-    data = pending_registrations.get(token)
+    token_info = registration_token_db.get_registration_token(token)
 
-    if not data:
+    if not token_info:
         return render_template("register.html", error="Enlace inválido o ya utilizado.")
 
-    if time.time() > data["expires_at"]:
-        pending_registrations.pop(token, None)
+    expires_at = datetime.fromisoformat(token_info["expires_at"])
+    if datetime.now() > expires_at:
+        registration_token_db.delete_registration_token(token)
         return render_template("register.html", error="El enlace ha caducado. Vuelve a registrarte.")
 
+    data = token_info["data"]
     # Guardar usuario ahora
     result = users_db.add_user(
         data["DNI"],
@@ -612,10 +634,11 @@ def forgot_password():
 
         if user:
             token = secrets.token_urlsafe(32)
-            reset_tokens[token] = {
+            token_data = {
                 "name": user["name"],
-                "expires_at": time.time() + 300
             }
+            expires_at = (datetime.now() + timedelta(minutes=5)).isoformat()
+            registration_token_db.save_registration_token(token, token_data, expires_at)
             reset_url = f"{request.host_url}reset_password/{token}"
 
             from_email = '"AGULE - Recuperación de contraseña" <mariohidtfg@gmail.com>'
@@ -641,11 +664,20 @@ def forgot_password():
 
 @app.route("/reset_password/<token>", methods=["GET", "POST"])
 def reset_password(token):
-    token_data = reset_tokens.get(token)
-    if not token_data or time.time() > token_data["expires_at"]:
+    token_info = registration_token_db.get_registration_token(token)
+    if not token_info:
         return render_template("reset_password.html",
                                error="El enlace ha caducado o no es válido.",
                                token=None)
+    
+    expires_at = datetime.fromisoformat(token_info["expires_at"])
+    if datetime.now() > expires_at:
+        registration_token_db.delete_registration_token(token)
+        return render_template("reset_password.html",
+                               error="El enlace ha caducado o no es válido.",
+                               token=None)
+    
+    token_data = token_info["data"]
 
     if request.method == "POST":
         new_password = request.form["new_password"]
@@ -675,7 +707,7 @@ def reset_password(token):
         private_key_encrypted = security.encrypt_private_key(private_key, new_password, salt)
 
         users_db.update_password_reset(user["name"], hashed_password, private_key_encrypted)
-        del reset_tokens[token]
+        registration_token_db.delete_registration_token(token)
 
         logging.info(f"Contraseña restablecida para {user['name']}.")
         return redirect(url_for("login"))
@@ -1150,7 +1182,14 @@ def vote_survey(survey_token):
     if survey_db.is_ended(survey):
         return redirect(url_for("survey_stats", survey_token=survey_token))
 
-    allowed, reason = check_survey_access(survey, username)
+    if not survey_db.is_started(survey):
+        return render_template("vote_survey.html",
+            username=username, survey=dict(survey),
+            questions=[], options_by_question={},
+            already_voted=False, needs_code_form=False,
+            access_denied=True, access_reason="La encuesta aún no ha comenzado.")
+
+    allowed, reason = check_survey_access(survey, username, surveyAdmins_db, surveyWhitelist_db)
 
     # Para encuestas con código, se verifica en la sesión o en POST
     code_verified  = session.get(f"code_ok_{survey_id}", False)
@@ -1167,7 +1206,7 @@ def vote_survey(survey_token):
             access_denied=True, access_reason=reason)
 
     user_hash     = security.generate_user_hash(survey_id, username, SECRET_KEY)
-    already_voted = submittedAnswers_db.get_user_submitted_answer(user_hash) is not None
+    already_voted = submittedAnswers_db.get_user_submitted_answer(user_hash, survey_id) is not None
     questions     = questions_db.list_questions(survey_id)
     options_by_question  = {q["id"]: questionOptions_dn.list_options(q["id"])
                      for q in questions}
@@ -1196,12 +1235,20 @@ def vote_survey(survey_token):
                 int(survey_id), user_hash, demo_group)
             if sub_id:
                 for q in questions:
-                    val = request.form.get(f"vote_option_{q['id']}")
-                    if val:
-                        if q["type"] in ["s", "m"]:
-                            answers_db.add_answer(sub_id, q["id"], int(val), None)
-                        else:
-                            answers_db.add_answer(sub_id, q["id"], None, val)
+                    if q["type"] == "m":
+                        # Para múltiples, capturar todos los valores
+                        vals = request.form.getlist(f"vote_option_{q['id']}")
+                        for val in vals:
+                            if val:
+                                answers_db.add_answer(sub_id, q["id"], int(val), None)
+                    else:
+                        # Para simple y otras, capturar un solo valor
+                        val = request.form.get(f"vote_option_{q['id']}")
+                        if val:
+                            if q["type"] == "s":
+                                answers_db.add_answer(sub_id, q["id"], int(val), None)
+                            else:
+                                answers_db.add_answer(sub_id, q["id"], None, val)
 
                 seal_ok = trigger_seal_for_survey(survey_id)
                 if not seal_ok:
