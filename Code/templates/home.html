@@ -47,13 +47,22 @@
         </div>
     {% endif %}
 
-    <!-- Buscar usuario -->
-    <div class="search-section">
-        <form method="POST">
-            <input type="text" name="user_searched"
-                   placeholder="Buscar usuario..." required>
-            <button type="submit" name="search_form">Buscar</button>
-        </form>
+    <!-- Buscar usuario y Acceso por código (lado a lado) -->
+    <div style="display:flex;gap:15px;margin-bottom:20px;align-items:center;">
+        <!-- Buscar usuario -->
+        <div class="search-section" style="flex:1;">
+            <form method="POST">
+                <input type="text" name="user_searched"
+                       placeholder="Buscar usuario..." required>
+                <button type="submit" name="search_form">Buscar</button>
+            </form>
+        </div>
+
+        <!-- Acceso a encuestas por código -->
+        <button onclick="window.location.href='/search_survey_by_code'" class="primary" 
+                style="padding:12px 24px;font-size:16px;white-space:nowrap;">
+            🔐 Por Código
+        </button>
     </div>
 
     <!-- Encuestas públicas del usuario buscado -->

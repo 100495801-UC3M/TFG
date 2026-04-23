@@ -14,18 +14,18 @@ class Users:
         # Crea la tabla de users si no existe
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                DNI TEXT NOT NULL UNIQUE,
-                DNI_search TEXT NOT NULL UNIQUE,
-                name TEXT NOT NULL UNIQUE,
-                email TEXT NOT NULL UNIQUE,
-                email_search TEXT NOT NULL UNIQUE,
-                password TEXT NOT NULL,
-                role TEXT DEFAULT "client",
-                created_at TEXT NOT NULL,
-                salt TEXT NOT NULL,
-                private_key TEXT,
-                certificate TEXT)''')
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                DNI             TEXT NOT NULL UNIQUE,
+                DNI_search      TEXT NOT NULL UNIQUE,
+                name            VARCHAR(50) NOT NULL UNIQUE,
+                email           TEXT NOT NULL UNIQUE,
+                email_search    TEXT NOT NULL UNIQUE,
+                password        TEXT NOT NULL,
+                role            TEXT DEFAULT "client",
+                created_at      TEXT NOT NULL,
+                salt            TEXT NOT NULL,
+                private_key     TEXT,
+                certificate     TEXT)''')
         self.connection.commit()
 
     def split_DNI(self, DNI):

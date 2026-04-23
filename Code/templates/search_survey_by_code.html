@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buscar Encuesta por Código - AGULE</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/interface.css') }}">
+    <script src="{{ url_for('static', filename='js/scripts.js') }}"></script>
+</head>
+<body>
+<div class="container">
+
+    <!-- Header -->
+    <div class="header">
+        <div>
+            <h1>Buscar Encuesta por Código</h1>
+        </div>
+        <div class="header-buttons">
+            {% if username %}
+                <button onclick="window.location.href='/home'" class="secondary">Volver</button>
+                <form action="/logout" method="POST" style="display:inline;">
+                    <button type="submit" class="secondary">Cerrar sesión</button>
+                </form>
+            {% else %}
+                <button onclick="window.location.href='/login'" class="secondary">Login</button>
+                <button onclick="window.location.href='/register'" class="secondary">Registro</button>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Mensajes de error -->
+    {% if error %}
+        <div class="error" style="margin-bottom:20px;">
+            ❌ {{ error }}
+        </div>
+    {% endif %}
+
+    <!-- Formulario de búsqueda -->
+    <div style="max-width:600px;margin:40px auto;background:#f8f9fa;
+                padding:30px;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,0.1);">
+        
+        <p style="margin-bottom:20px;color:#666;">
+            Si alguien te ha compartido un código de acceso, ingresalo aquí para acceder a la encuesta.
+        </p>
+
+        <form method="POST">
+            <div style="margin-bottom:20px;">
+                <label for="access_code" style="display:block;margin-bottom:10px;font-weight:bold;">
+                    Código de Acceso:
+                </label>
+                <input type="text" 
+                       id="access_code" 
+                       name="access_code" 
+                       placeholder="Ej: abc123xyz"
+                       required
+                       maxlength="50"
+                       style="width:100%;padding:10px;border:1px solid #ccc;
+                              border-radius:4px;font-size:16px;box-sizing:border-box;"/>
+            </div>
+
+            <div style="display:flex;gap:10px;">
+                <button type="submit" class="primary" style="flex:1;">
+                    Buscar Encuesta
+                </button>
+                <button type="button" onclick="window.location.href='/home'" class="secondary" style="flex:1;">
+                    Cancelar
+                </button>
+            </div>
+        </form>
+    </div>
+
+</div>
+</body>
+</html>

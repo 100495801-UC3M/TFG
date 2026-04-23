@@ -1190,6 +1190,39 @@ def edit_survey(survey_token):
         survey=dict(survey), questions=questions, error=None, info=None)
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# BÚSQUEDA DE ENCUESTAS POR CÓDIGO
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/search_survey_by_code", methods=["GET", "POST"])
+def search_survey_by_code():
+    """Permite buscar y acceder a encuestas protegidas por código."""
+    if "username" not in session:
+        return redirect(url_for("login"))
+    
+    username = session["username"]
+    error = None
+    
+    if request.method == "POST":
+        access_code = request.form.get("access_code", "").strip()
+        
+        if not access_code:
+            error = "Por favor ingresa un código."
+        else:
+            # Buscar encuesta por código
+            survey = survey_db.get_survey_by_code(access_code)
+            
+            if not survey:
+                error = "No se encontró encuesta con ese código."
+            else:
+                # Encuesta encontrada, redirigir a la página de votación
+                survey_token = security.encode_survey_id(survey["id"], SECRET_KEY)
+                return redirect(url_for("vote_survey", survey_token=survey_token))
+    
+    return render_template("search_survey_by_code.html",
+        username=username, error=error)
+
+
 @app.route("/vote_survey/<string:survey_token>", methods=["GET", "POST"])
 def vote_survey(survey_token):
     survey_id = security.decode_survey_id(survey_token, SECRET_KEY)

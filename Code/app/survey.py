@@ -68,7 +68,7 @@ class Survey:
                                   
             CREATE TABLE IF NOT EXISTS answer (
                 id                      INTEGER PRIMARY KEY AUTOINCREMENT,
-                submitted_answer_id    INTEGER NOT NULL,
+                submitted_answer_id     INTEGER NOT NULL,
                 question_id             INTEGER NOT NULL,
                 option_id               INTEGER,
                 answer                  TEXT,
