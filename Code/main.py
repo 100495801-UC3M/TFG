@@ -786,7 +786,9 @@ def create_survey():
             description = request.form.get("survey_description", "").strip()
             start_at    = request.form.get("start_at", "").strip()
             end_at      = request.form.get("end_at", "").strip()
-            is_public   = request.form.get("is_public", "n")
+            visibility  = request.form.get("visibility", "y")   # ← nombre real del campo
+
+            is_public, privacy_mode, access_code = parse_visibility(visibility)
 
             if not title:
                 return render_template("create_survey.html", username=username, survey_id=None, 
@@ -803,8 +805,10 @@ def create_survey():
                 except ValueError:
                     pass
             
-            new_survey_id = survey_db.add_survey(username, title, description, start_at, end_at, is_public)
-            
+            new_survey_id = survey_db.add_survey(
+                username, title, description, start_at, end_at,
+                is_public, privacy_mode, access_code)     
+                   
             if new_survey_id:
                 logging.info(f"Encuesta '{title}' creada por {username}.")
                 token = security.encode_survey_id(new_survey_id, SECRET_KEY)
@@ -1342,43 +1346,90 @@ def survey_stats(survey_token):
         abort(404)
     if "username" not in session:
         return redirect(url_for("login"))
-
     username = session["username"]
-    survey   = survey_db.get_survey(survey_id)
+    survey = survey_db.get_survey(survey_id)
     if not survey:
         abort(404)
 
-    # Solo el creador, admins o (encuesta pública y cualquier usuario)
     is_creator = survey["creator_id"] == username
     is_admin   = surveyAdmins_db.is_admin(survey_id, username)
     is_public  = survey["is_public"] == 'y'
     if not (is_creator or is_admin or is_public):
         abort(403)
 
-    questions     = load_questions_with_options(survey_id)
-    total_votes   = survey_db.get_vote_count(survey_id)
-    option_counts = survey_db.get_option_counts(survey_id)
+    questions   = load_questions_with_options(survey_id)
+    total_votes = survey_db.get_vote_count(survey_id)
 
-    # Estadísticas por pregunta
-    q_stats = []
-    for q in questions:
-        entry = {"question": q, "type": q["type"]}
-        if q["type"] in ("s", "m"):
-            counts = {o["id"]: option_counts.get(o["id"], 0)
-                      for o in q["options"]}
-            entry["option_counts"] = counts
+    demographic_questions = [dict(q) for q in questions if dict(q).get("is_demographic")]
+    result_questions      = [dict(q) for q in questions if not dict(q).get("is_demographic")]
+
+    # Submissions con sus respuestas
+    all_subs = submittedAnswers_db.get_usurvey_submitted_answers(survey_id)
+    submissions_data = []
+    for sub in all_subs:
+        sub_dict = dict(sub)
+        answers_by_q = {}
+        for ans in answers_db.get_answers(sub_dict["id"]):
+            a = dict(ans)
+            qid = str(a["question_id"])
+            if a.get("option_id") is not None:
+                answers_by_q.setdefault(qid, []).append(a["option_id"])
+            elif a.get("answer") is not None:
+                answers_by_q.setdefault(qid, []).append(str(a["answer"]))
+        submissions_data.append({"answers": answers_by_q})
+
+    # Metadata de filtros demográficos
+    demo_filters = []
+    for q in demographic_questions:
+        qid = str(q["id"])
+        if q["type"] == "t":
+            rows = survey_db.connection.execute("""
+                SELECT DISTINCT a.answer FROM answer a
+                JOIN submitted_answer sa ON a.submitted_answer_id = sa.id
+                WHERE sa.survey_id = ? AND a.question_id = ? AND a.answer IS NOT NULL
+                ORDER BY a.answer
+            """, (survey_id, q["id"])).fetchall()
+            demo_filters.append({
+                "id": qid, "title": q["title"], "type": "t",
+                "values": [r["answer"] for r in rows]
+            })
         elif q["type"] == "n":
-            entry["numeric"] = survey_db.get_numeric_stats(survey_id, q["id"])
-        elif q["type"] == "t":
-            entry["texts"] = survey_db.get_text_answers(survey_id, q["id"])
-        q_stats.append(entry)
+            row = survey_db.connection.execute("""
+                SELECT MIN(CAST(a.answer AS REAL)) as mn, MAX(CAST(a.answer AS REAL)) as mx
+                FROM answer a
+                JOIN submitted_answer sa ON a.submitted_answer_id = sa.id
+                WHERE sa.survey_id = ? AND a.question_id = ? AND a.answer IS NOT NULL
+            """, (survey_id, q["id"])).fetchone()
+            demo_filters.append({
+                "id": qid, "title": q["title"], "type": "n",
+                "min": row["mn"] if row["mn"] is not None else 0,
+                "max": row["mx"] if row["mx"] is not None else 100
+            })
+        elif q["type"] in ("s", "m"):
+            demo_filters.append({
+                "id": qid, "title": q["title"], "type": q["type"],
+                "options": [{"id": o["id"], "text": o["option_text"]}
+                            for o in q.get("options", [])]
+            })
+
+    # Metadata de preguntas de resultado
+    questions_meta = []
+    for q in result_questions:
+        qm = {"id": str(q["id"]), "title": q["title"], "type": q["type"]}
+        if q["type"] in ("s", "m"):
+            qm["options"] = [{"id": o["id"], "text": o["option_text"]}
+                             for o in q.get("options", [])]
+        questions_meta.append(qm)
 
     return render_template("statistics.html",
-        survey      = dict(survey),
-        total_votes = total_votes,
-        q_stats     = q_stats,
-        is_creator  = is_creator,
-        is_admin    = is_admin,
+        survey           = dict(survey),
+        total_votes      = total_votes,
+        is_creator       = is_creator,
+        is_admin         = is_admin,
+        submissions_json     = json.dumps(submissions_data),
+        demo_filters_json    = json.dumps(demo_filters),
+        questions_meta_json  = json.dumps(questions_meta),
+        encode_survey_id     = lambda sid: security.encode_survey_id(sid, SECRET_KEY),
     )
 
 if __name__ == "__main__":

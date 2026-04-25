@@ -599,6 +599,11 @@ class Answers:
             return (answer["answer"], "answer")
         return False
 
+    def get_answers(self, submitted_answer_id):
+        return self.cursor.execute(
+            "SELECT * FROM answer WHERE submitted_answer_id = ?",
+            (submitted_answer_id,)).fetchall()
+
 
 class Statistics:
     def __init__(self, connection):
