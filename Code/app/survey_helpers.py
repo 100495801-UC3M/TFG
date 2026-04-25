@@ -85,3 +85,85 @@ def build_numeric_stats_list(survey_id, questions_db, survey_db, submitted_answe
             stats_list.append(total)
     
     return stats_list
+
+
+def send_surveys_to_server(survey_id, demographic_group, answers_plain, statistics_db, cliente_seal):
+    """
+    Envía respuestas numéricas al servidor SEAL para calcular estadísticas
+    cifradas mediante operaciones homomorfas.
+
+    Parámetros:
+      - survey_id         : id de la encuesta
+      - demographic_group : grupo demográfico (ej: pregunta_id como string)
+      - answers_plain     : lista[float] de respuestas sin cifrar
+      - statistics_db     : instancia de base de datos de estadísticas
+      - cliente_seal      : cliente de conexión al servidor SEAL
+
+    Retorna True si el servidor procesó exitosamente, False en caso contrario.
+    """
+    import logging
+    
+    try:
+        if not answers_plain:
+            return False
+
+        # Recuperar lista encriptada anterior de BD (será None si es la primera vez)
+        existing = statistics_db.get_value_demo(survey_id, demographic_group)
+        lista1_encrypted_base64 = None
+        if existing and existing['stat_type'] == 'sum':
+            lista1_encrypted_base64 = existing['value']
+
+        # ── Llamada al servidor C++ vía cppclient ──────────────────────────
+        # Ambos métodos reciben: lista2_plain, lista1_encrypted_base64
+        # cppclient solo encripta lista2, deserializa lista1 si existe
+        result_sum_b64 = cliente_seal.compute_sum(answers_plain, lista1_encrypted_base64)
+        result_avg_b64 = cliente_seal.compute_average(answers_plain, lista1_encrypted_base64)
+
+        if result_sum_b64 is None or result_avg_b64 is None:
+            logging.warning(f"SEAL retornó None para survey {survey_id}, grupo {demographic_group}")
+            return False
+
+        n = len(answers_plain)
+
+        # Insertar o actualizar en la tabla statistics
+        if existing:
+            statistics_db.update_values(survey_id, demographic_group, n, 'sum', result_sum_b64)
+            statistics_db.update_values(survey_id, demographic_group, n, 'average', result_avg_b64)
+        else:
+            statistics_db.add_all_values(survey_id, demographic_group)
+            statistics_db.update_values(survey_id, demographic_group, n, 'sum', result_sum_b64)
+            statistics_db.update_values(survey_id, demographic_group, n, 'average', result_avg_b64)
+
+        logging.info(f"Estadísticas SEAL actualizadas – encuesta {survey_id}, grupo {demographic_group}")
+        return True
+
+    except Exception as e:
+        logging.error(f"Error actualizando estadísticas SEAL: {e}")
+        return False
+
+
+def trigger_seal_for_survey(survey_id, questions_db, survey_db, submittedAnswers_db, statistics_db, cliente_seal):
+    """
+    Itera las preguntas numéricas de la encuesta y calcula estadísticas cifradas.
+    Se invoca tras cada nueva votación.
+    Devuelve True si todo fue bien, False si alguna llamada falló.
+    """
+    import logging
+    
+    try:
+        # Construir lista de estadísticas numéricas: [0, suma, 0, media, ...]
+        # Solo procesa preguntas numéricas, pone 0 en las demás
+        stats_list = build_numeric_stats_list(survey_id, questions_db, survey_db, submittedAnswers_db)
+        
+        if not stats_list or sum(stats_list) == 0:
+            logging.debug(f"Sin datos numéricos para encuesta {survey_id}")
+            return True
+
+        # Agrupar por survey (demographic_group = "numeric_stats")
+        demographic_group = "numeric_stats"
+        
+        return send_surveys_to_server(survey_id, demographic_group, stats_list, statistics_db, cliente_seal)
+
+    except Exception as e:
+        logging.error(f"Error en trigger_seal_for_survey: {e}")
+        return False
