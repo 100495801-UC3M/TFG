@@ -209,14 +209,14 @@ def register():
         # Generar token único con expiración de 5 minutos
         token = str(uuid.uuid4())
         token_data = {
-            "DNI":              dni_index,
-            "DNI_search":       dni_encrypted,
+            "DNI":              dni_index if isinstance(dni_index, str) else base64.urlsafe_b64encode(dni_index).decode(),
+            "DNI_search":       dni_encrypted if isinstance(dni_encrypted, str) else base64.urlsafe_b64encode(dni_encrypted).decode(),
             "name":             name,
-            "email":            email_index,
-            "email_search":     email_encrypted,
-            "hashed_password":  hashed_password,
+            "email":            email_index if isinstance(email_index, str) else base64.urlsafe_b64encode(email_index).decode(),
+            "email_search":     email_encrypted if isinstance(email_encrypted, str) else base64.urlsafe_b64encode(email_encrypted).decode(),
+            "hashed_password":  hashed_password if isinstance(hashed_password, str) else base64.urlsafe_b64encode(hashed_password).decode(),
             "salt":             base64.urlsafe_b64encode(salt).decode(),
-            "private_key":      private_key_encrypted,
+            "private_key":      private_key_encrypted if isinstance(private_key_encrypted, str) else base64.urlsafe_b64encode(private_key_encrypted).decode(),
         }
         expires_at = (datetime.now() + timedelta(minutes=5)).isoformat()
         registration_token_db.save_registration_token(token, token_data, expires_at)
@@ -625,19 +625,26 @@ def confirm_register(token):
         return render_template("register.html", error="El enlace ha caducado. Vuelve a registrarte.")
 
     data = token_info["data"]
-    # Guardar usuario ahora
+
+    # Decodificar los campos que originalmente eran bytes
+    def _decode(v):
+        try:
+            return base64.urlsafe_b64decode(v)
+        except Exception:
+            return v  # Si falla, devolver tal cual (era string)
+
     result = users_db.add_user(
-        data["DNI"],
-        data["DNI_search"],
-        data["name"],
-        data["email"],
-        data["email_search"],
-        data["hashed_password"],
-        data["salt"],
-        data["private_key"]
+        _decode(data["DNI"]),           # dni_index (HMAC) → puede ser str, _decode lo deja igual si falla
+        _decode(data["DNI_search"]),    # dni_encrypted → bytes originales
+        data["name"],                   # siempre fue str
+        _decode(data["email"]),         # email_index
+        _decode(data["email_search"]), # email_encrypted → bytes originales
+        _decode(data["hashed_password"]),  # hash → bytes originales ← CAUSA DEL BUG
+        data["salt"],                   # ya era base64 str, la BD lo guarda así
+        _decode(data["private_key"]),  # private_key_encrypted → bytes originales
     )
 
-    pending_registrations.pop(token, None)
+    registration_token_db.delete_registration_token(token)
 
     if result:
         logging.info(f"Usuario {data['name']} registrado tras confirmación por email.")
