@@ -253,6 +253,30 @@ class Survey:
     def delete_survey(self, survey_id):
         self.cursor.execute("DELETE FROM survey WHERE id = ?", (survey_id,))
         self.connection.commit()
+    
+    def get_surveys_as_whitelist(self, username, limit=None, offset=0):
+        if limit:
+            return self.cursor.execute("""
+                SELECT survey.* FROM survey
+                JOIN survey_whitelist ON survey.id = survey_whitelist.survey_id
+                WHERE survey_whitelist.user_id = ? AND survey.creator_id != ?
+                ORDER BY survey.created_at DESC
+                LIMIT ? OFFSET ?
+            """, (username, username, limit, offset)).fetchall()
+        return self.cursor.execute("""
+            SELECT survey.* FROM survey
+            JOIN survey_whitelist ON survey.id = survey_whitelist.survey_id
+            WHERE survey_whitelist.user_id = ? AND survey.creator_id != ?
+            ORDER BY survey.created_at DESC
+        """, (username, username)).fetchall()
+
+    def count_surveys_as_whitelist(self, username):
+        result = self.cursor.execute("""
+            SELECT COUNT(DISTINCT survey.id) as count FROM survey
+            JOIN survey_whitelist ON survey.id = survey_whitelist.survey_id
+            WHERE survey_whitelist.user_id = ? AND survey.creator_id != ?
+        """, (username, username)).fetchone()
+        return result["count"]
 
     # ── Estadísticas Python (sin SEAL) ────────────────────────────────────────
 
@@ -524,6 +548,11 @@ class QuestionOptions:
         self.connection.commit()
         self.reorder_positions(question_id)
         return True
+    
+    def remove_all_options(self, question_id):
+        """Elimina todas las opciones de una pregunta."""
+        self.cursor.execute("DELETE FROM question_option WHERE question_id = ?", (question_id,))
+        self.connection.commit()
 
 
 class SubmittedAnswers:

@@ -170,10 +170,22 @@
                     style="margin-top:10px;">+ Agregar Opción</button>
         </div>
         <div class="form-group">
-            <label>
-                <input type="checkbox" name="is_demographic">
-                ¿Es una pregunta demográfica?
-            </label>
+            <div class="check-row">
+                <label>
+                    <input type="checkbox" name="is_demographic" id="is_demographic"
+                        onchange="toggleRequired('is_demographic','required-group')">
+                    👥 ¿Es una pregunta demográfica?
+                </label>
+                <span id="required-group">
+                    <label>
+                        <input type="checkbox" name="is_required" id="is_required" checked>
+                        * Obligatoria
+                    </label>
+                </span>
+            </div>
+            <small style="margin-top:4px;display:block;">
+                Las preguntas demográficas son siempre obligatorias.
+            </small>
         </div>
         <button type="submit" name="add_question" value="add_question" class="primary"
                 onclick="return validateQuestionTitle();">
@@ -198,16 +210,25 @@
                              onclick="toggleEditQuestion({{ question.id }})">
                             <div style="flex-grow:1;cursor:pointer;">
                                 <h4>#{{ loop.index }} - {{ question.title }}</h4>
-                                <p><strong>Tipo:</strong>
-                                    {% if question.type == 't' %}Texto abierto
-                                    {% elif question.type == 'n' %}Numérico
-                                    {% elif question.type == 's' %}Opción única
-                                    {% elif question.type == 'm' %}Opción múltiple
-                                    {% endif %}
-                                </p>
-                                {% if question.is_demographic %}
-                                    <p><strong style="color:#28a745;">● Pregunta Demográfica</strong></p>
-                                {% endif %}
+                                    <p><strong>Tipo:</strong>
+                                        {% if question.type == 't' %}Texto abierto
+                                        {% elif question.type == 'n' %}Numérico
+                                        {% elif question.type == 's' %}Opción única
+                                        {% elif question.type == 'm' %}Opción múltiple
+                                        {% endif %}
+                                    </p>
+                                    <div class="question-badges">
+                                        {% if question.is_demographic %}
+                                            <span class="badge-demo">👥 Demográfica</span>
+                                        {% endif %}
+                                        {% if not question.is_demographic %}
+                                            {% if question.is_required %}
+                                                <span class="badge-required">* Obligatoria</span>
+                                            {% else %}
+                                                <span class="badge-optional">Opcional</span>
+                                            {% endif %}
+                                        {% endif %}
+                                    </div>
                             </div>
                             <button type="button" class="secondary"
                                     style="margin-left:10px;width:auto;cursor:pointer;"
@@ -229,13 +250,13 @@
                         {% endif %}
 
                         <div id="edit-form-{{ question.id }}" class="edit-section"
-                             style="display:none;margin-top:15px;">
+                            style="display:none;margin-top:15px;">
                             <form method="POST">
                                 <input type="hidden" name="question_id" value="{{ question.id }}">
                                 <div class="form-group">
                                     <label>Título:</label>
                                     <input type="text" name="edit_question_title"
-                                           value="{{ question.title }}" required>
+                                        value="{{ question.title }}" required>
                                 </div>
                                 <div class="form-group">
                                     <label>Tipo:</label>
@@ -249,16 +270,14 @@
                                     </select>
                                 </div>
                                 <div id="edit-options-group-{{ question.id }}" class="form-group"
-                                     style="display:{% if question.type in ('s','m') %}block{% else %}none{% endif %};">
+                                    style="display:{% if question.type in ('s','m') %}block{% else %}none{% endif %};">
                                     <label>Opciones:</label>
                                     <div id="edit-options-container-{{ question.id }}">
                                         {% for option in question.options or [] %}
                                             <div style="display:flex;gap:8px;margin-bottom:8px;">
                                                 <input type="text" name="edit_options[]"
-                                                       value="{{ option.option_text }}"
-                                                       style="flex-grow:1;">
-                                                <input type="hidden" name="edit_option_ids[]"
-                                                       value="{{ option.id }}">
+                                                    value="{{ option.option_text }}"
+                                                    style="flex-grow:1;">
                                                 <button type="button" class="secondary"
                                                         onclick="removeEditOption(this)"
                                                         style="width:auto;">✕</button>
@@ -272,11 +291,24 @@
                                     </button>
                                 </div>
                                 <div class="form-group">
-                                    <label>
-                                        <input type="checkbox" name="edit_is_demographic"
-                                               {% if question.is_demographic %}checked{% endif %}>
-                                        ¿Es una pregunta demográfica?
-                                    </label>
+                                    <div class="check-row">
+                                        <label>
+                                            <input type="checkbox" name="edit_is_demographic"
+                                                id="edit-demo-{{ question.id }}"
+                                                {% if question.is_demographic %}checked{% endif %}
+                                                onchange="toggleRequired('edit-demo-{{ question.id }}',
+                                                            'edit-req-{{ question.id }}')">
+                                            👥 ¿Demográfica?
+                                        </label>
+                                        <span id="edit-req-{{ question.id }}"
+                                            style="{% if question.is_demographic %}display:none{% endif %}">
+                                            <label>
+                                                <input type="checkbox" name="edit_is_required"
+                                                    {% if question.is_required %}checked{% endif %}>
+                                                * Obligatoria
+                                            </label>
+                                        </span>
+                                    </div>
                                 </div>
                                 <div class="form-group">
                                     <button type="submit" name="update_question" class="primary">

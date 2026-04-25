@@ -79,7 +79,6 @@
         {% endif %}
     </div>
 
-    <!-- ── TODO 6: Gestión de admins ──────────────────────────────────── -->
     <div style="background:#f3f0ff;border:1px solid #d0c7ff;border-radius:8px;
                 padding:16px;margin-bottom:24px;">
         <h2 style="margin:0 0 12px;">👤 Admins de la encuesta</h2>
@@ -112,6 +111,39 @@
         </form>
     </div>
 
+    {% if survey and survey.privacy_mode == 'whitelist' %}
+    <div style="background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;
+                padding:16px;margin-bottom:24px;">
+        <h2 style="margin:0 0 12px;">👥 Lista Blanca</h2>
+
+        {% if whitelist %}
+            <ul style="margin:0 0 12px;padding-left:20px;">
+                {% for entry in whitelist %}
+                    <li style="margin-bottom:6px;">
+                        {{ entry.user_id }}
+                        <form method="POST" action="/create_survey?survey_id={{ survey_id }}"
+                            style="display:inline;margin-left:8px;">
+                            <input type="hidden" name="wl_to_remove" value="{{ entry.user_id }}">
+                            <button type="submit" name="remove_whitelist" class="danger"
+                                    style="padding:2px 8px;min-width:auto;font-size:.8rem;"
+                                    onclick="return confirm('¿Quitar de la lista blanca?');">✕</button>
+                        </form>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p style="color:#555;margin:0 0 12px;">La lista blanca está vacía.</p>
+        {% endif %}
+
+        <form method="POST" action="/create_survey?survey_id={{ survey_id }}"
+            style="display:flex;gap:8px;align-items:center;">
+            <input type="text" name="whitelist_username"
+                placeholder="Nombre de usuario..." style="flex:1;max-width:280px;">
+            <button type="submit" name="add_whitelist" class="primary"
+                    style="min-width:auto;">+ Añadir</button>
+        </form>
+    </div>
+    {% endif %}
     <!-- ── Agregar pregunta ────────────────────────────────────────────── -->
     <h2>Agregar Pregunta</h2>
     <form method="POST" action="/create_survey?survey_id={{ survey_id }}">

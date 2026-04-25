@@ -284,6 +284,66 @@
         </div>
     {% endif %}
 
+    <!-- Encuestas donde estoy en la lista blanca -->
+{% if whitelist_surveys %}
+    <div class="survey-section">
+        <h2>Encuestas a las que estoy invitado</h2>
+        <div class="survey-grid">
+            {% for survey in whitelist_surveys %}
+                {% set ended = survey_is_ended(survey) %}
+                {% set not_started = survey_not_started(survey) %}
+                <div class="survey-card {% if ended %}survey-ended{% endif %}"
+                     style="border-left:4px solid #28a745;">
+                    <h3>
+                        {{ survey.title }}
+                        {% if ended %}
+                            <span class="badge-ended">✓ Finalizada</span>
+                        {% elif not_started %}
+                            <span class="badge-pending">⏳ Próximamente</span>
+                        {% endif %}
+                    </h3>
+                    <p class="description">{{ survey.description }}</p>
+                    <p><small>Creador: {{ survey.creator_id }}</small></p>
+                    <p><small>🔒 Lista blanca</small></p>
+
+                    <div class="button-group">
+                        {% set user_hash = none %}
+                        {% if ended %}
+                            <button onclick="window.location.href='/stats/{{ encode_survey_id(survey.id) }}'">
+                                📊 Ver Estadísticas
+                            </button>
+                        {% elif not_started %}
+                            <button disabled style="background-color:#ccc;cursor:not-allowed;">
+                                Próximamente
+                            </button>
+                        {% else %}
+                            <button onclick="window.location.href='/vote_survey/{{ encode_survey_id(survey.id) }}'">
+                                Votar
+                            </button>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+
+        {% if total_pages_whitelist > 1 %}
+            <div class="pagination">
+                {% if page_whitelist > 1 %}
+                    <a href="{{ url_for('home', page_my=page_my, page_admin=page_admin,
+                               page_search=page_search, page_whitelist=page_whitelist-1) }}"
+                       class="pagination-btn">← Anterior</a>
+                {% endif %}
+                <span class="pagination-info">Página {{ page_whitelist }} de {{ total_pages_whitelist }}</span>
+                {% if page_whitelist < total_pages_whitelist %}
+                    <a href="{{ url_for('home', page_my=page_my, page_admin=page_admin,
+                               page_search=page_search, page_whitelist=page_whitelist+1) }}"
+                       class="pagination-btn">Siguiente →</a>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+{% endif %}
+
 </div>
 </body>
 </html>
