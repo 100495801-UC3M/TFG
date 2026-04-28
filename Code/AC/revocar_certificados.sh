@@ -55,7 +55,7 @@ revocar_certificado() {
     return 0
 }
 
-# ============ INICIO DEL SCRIPT ============
+# INICIO DEL SCRIPT
 
 # Contar certificados disponibles
 CERTIFICADOS_COUNT=$(ls -1 "$CERTS_DIR"/*.pem 2>/dev/null | wc -l)

@@ -32,7 +32,6 @@
         {% endif %}
     </div>
 
-    <!-- ── Editar fechas y visibilidad (TODO 2) ────────────────────────── -->
     <h2>Editar Fechas y Visibilidad</h2>
     <form method="POST">
         <div class="form-group">
@@ -46,7 +45,6 @@
                    value="{{ survey.end_at or '' }}">
         </div>
 
-        <!-- TODO 2: Selector de visibilidad -->
         <div class="form-group">
             <label for="visibility">Visibilidad</label>
             <select id="visibility" name="visibility">
@@ -77,7 +75,6 @@
         </button>
     </form>
 
-    <!-- ── TODO 2: Gestión de Lista Blanca ────────────────────────────── -->
     {% if survey.privacy_mode == 'whitelist' %}
         <div style="background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;
                     padding:16px;margin:24px 0;">
@@ -114,7 +111,6 @@
         </div>
     {% endif %}
 
-    <!-- ── TODO 6: Gestión de Admins ──────────────────────────────────── -->
     <div style="background:#f3f0ff;border:1px solid #d0c7ff;border-radius:8px;
                 padding:16px;margin:24px 0;">
         <h2 style="margin:0 0 12px;">👤 Admins de la encuesta</h2>
@@ -333,7 +329,6 @@
 
     <!-- Botones finales -->
     <div style="margin-top:30px;border-top:1px solid #ddd;padding-top:20px;">
-        <!-- TODO 3: Botón de estadísticas -->
         <button class="secondary"
                 onclick="window.location.href='/stats/{{ encode_survey_id(survey.id) }}'">
             📊 Ver Estadísticas

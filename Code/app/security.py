@@ -156,52 +156,6 @@ def deserialize_private_key(serialized_private_key):
     return private_key
 
 
-def encrypt_aes_message(message, aes_key):
-    # Cifrar el mensaje con la clave aes
-    iv = os.urandom(16)
-    cipher = Cipher(algorithms.AES(aes_key), modes.CFB(iv))
-    encryptor = cipher.encryptor()
-
-    encrypted_message = iv + encryptor.update(message.encode()) + encryptor.finalize()
-    logging.info(f"Mensaje cifrado con AES: {encrypted_message.hex()}")
-    return encrypted_message
-
-
-def decrypt_message(mensaje_cifrado, clave_aes):
-    # Descifrar el mensaje con la clave aes
-    iv = mensaje_cifrado[:16]
-    ciphertext = mensaje_cifrado[16:]
-
-    cipher = Cipher(algorithms.AES(clave_aes), modes.CFB(iv))
-    decryptor = cipher.decryptor()
-
-    mensaje_descifrado = decryptor.update(ciphertext) + decryptor.finalize()
-    logging.info(f"Mensaje descifrado: {mensaje_descifrado.decode('utf-8')}")
-    return mensaje_descifrado.decode("utf-8")
-
-
-def generate_hmac(aes_key, encrypted_message):
-    # Generar el HMAC usando la clave AES y el mensaje cifrado
-    h = HMAC(aes_key, hashes.SHA256())
-    h.update(encrypted_message)
-    hmac_tag = h.finalize()
-    logging.info(f"HMAC generado: {hmac_tag.hex()}")
-    return hmac_tag
-
-
-def verify_hmac(aes_key, encrypted_message, hmac_label_received):
-    # Generar un nuevo HMAC usando la misma clave AES y verificar si el HMAC coincide con el recibido
-    h = HMAC(aes_key, hashes.SHA256())
-    h.update(encrypted_message)
-
-    try:
-        h.verify(hmac_label_received)
-        logging.info("HMAC verificado correctamente. El mensaje es auténtico.")
-        return True
-    except InvalidSignature:
-        logging.error("HMAC incorrecto. El mensaje ha sido alterado o no es auténtico.")
-        return False
-
 
 def encrypt_aes_rsa_key(aes_key, public_key):
     # Cifrar la clave AES usando la clave pública
@@ -229,44 +183,6 @@ def decrypt_aes_rsa_key(encrypted_aes_key, private_key):
     )
     logging.info(f"Clave AES descifrada con RSA: {aes_key.hex()}")
     return aes_key
-
-
-def check_messages(conversations, username, username_public_key, username_private_key):
-    # Verificar si los mensajes se puden descifrar con la clave privada y devolver los que si se han podido
-    good_messages = []
-
-    # Conseguir por cada mensaje la clave AES descifrada y la clave pública de quien ha enviado el mensaje
-    for message in conversations:
-        if message["sender"] == username:
-            try:
-                aes = decrypt_aes_rsa_key(message["aes_key_sender"], username_private_key)
-                sender_public_key = username_public_key
-            except:
-                return "error"
-        else:
-            try:
-                aes = decrypt_aes_rsa_key(message["aes_key_receiver"], username_private_key)
-                users_db = Users(db_name="./db/users.db")
-                user = users_db.check_user(message["sender"])
-
-                route = user["certificate"]
-
-                if route == "" or route is None:
-                    return "error"
-                else:
-                    sender_public_key = get_public_key_from_certificate(route)
-            except:
-                
-                return "error"
-
-        # Verificar el mensaje tanto por la firma con la clave pública como por el hmac. Proporciona integridad, autenticidad y confidencialidad
-        if verify_message(message["text"], message["hmac"], message["signature"], sender_public_key):
-            if verify_hmac(aes, message["text"], message["hmac"]):
-                message_decrypted = decrypt_message(message["text"], aes)
-                good_messages.append([message["id"], message["sender"], message_decrypted, message["datehour"]])
-                logging.info(f"La firma del mensaje ha sido verificada correctamente")
-
-    return good_messages
 
 
 def create_request(username, public_key, private_key):
@@ -363,45 +279,6 @@ def get_public_key_from_request(request_path):
     return csr.public_key()
 
 
-def sign_message(encryped_message, hmac, sender_private_key):
-    # Firmar el mensaje con la clave privada del emisor
-    message = encryped_message + hmac 
-    signature = sender_private_key.sign(
-        message,
-        padding.PSS(
-            mgf=padding.MGF1(hashes.SHA256()),
-            salt_length=padding.PSS.MAX_LENGTH
-        ),
-        hashes.SHA256()
-    )
-    #NOTA: El log aparece ANTES de la verificación de todos los mensajes, por lo que aunque esté en la terminal,
-    # puede que no lo encuentres rápidamente. Recomendable usar CNTRL + F y buscar "chacha256" en la terminal.
-    logging.info(f"La firma del mensaje: {message.hex()} ha sido creada con ChaCha256")
-    return signature
-
-
-def verify_message(encryped_message, hmac, signature, public_key):
-    # Verificar la firma del mensaje
-    message = encryped_message + hmac 
-    try:
-        public_key.verify(
-            signature,
-            message,
-            padding.PSS(
-                mgf=padding.MGF1(hashes.SHA256()),
-                salt_length=padding.PSS.MAX_LENGTH
-            ),
-            hashes.SHA256())
-        
-        logging.info("Firma verificada correctamente. Algoritmo de hash: SHA256, Padding: PSS con MGF1.")
-        return True
-    except InvalidSignature:
-        logging.error("La firma es inválida. El mensaje puede haber sido alterado.")
-        return False
-    except Exception as e:
-        logging.error(f"Error inesperado durante la verificación: {str(e)}")
-        return False
-
 
 def send_email_gmail_api(from_email: str, to_email: str, subject: str, body: str):
     to_email = to_email.strip().strip('"')
@@ -482,11 +359,11 @@ def send_email_gmail_api(from_email: str, to_email: str, subject: str, body: str
 
 def refresh_access_token():
 
-    # client_id y client_secret → client_secret.json
+    # client_id y client_secret -> client_secret.json
     with open("./config/client_secret.json") as f:
         config = json.load(f)["web"]
 
-    # refresh_token → token_store.json
+    # refresh_token -> token_store.json
     with open("./config/token_store.json") as f:
         token_store = json.load(f)
 

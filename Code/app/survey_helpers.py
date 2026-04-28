@@ -66,7 +66,7 @@ def build_numeric_stats_list(survey_id, questions_db, survey_db, submitted_answe
     
     for question in questions:
         if question["type"] != 'n':
-            # Preguntas no-numéricas → 0
+            # Preguntas no-numéricas -> 0
             stats_list.append(0.0)
         else:
             # Preguntas numéricas → sumar todas las respuestas
@@ -113,7 +113,7 @@ def send_surveys_to_server(survey_id, demographic_group, answers_plain, statisti
         if existing and existing['stat_type'] == 'sum':
             lista1_encrypted_base64 = existing['value']
 
-        # ── Llamada al servidor C++ vía cppclient ──────────────────────────
+        # Llamada al servidor C++ vía cppclient
         # Ambos métodos reciben: lista2_plain, lista1_encrypted_base64
         # cppclient solo encripta lista2, deserializa lista1 si existe
         result_sum_b64 = cliente_seal.compute_sum(answers_plain, lista1_encrypted_base64)

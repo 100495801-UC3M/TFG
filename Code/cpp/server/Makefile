@@ -47,21 +47,15 @@ TARGET_SERVER_P2P = servidor
 # Servidor RPC de logging
 TARGET_RPC_LOGGER_SERVER = logger_serverd
 
-# -------------------
 # Regla por defecto
-# -------------------
 all: $(TARGET_SERVER_P2P) $(TARGET_RPC_LOGGER_SERVER)
 
-# -------------------
 # Generar archivos RPC
-# -------------------
 $(RPC_HEADER) $(RPC_CLIENT_SRC) $(RPC_SERVER_SKELETON_SRC) $(RPC_XDR_SRC): $(RPC_DEF_FILE)
 	@echo "Generando archivos RPC desde $(RPC_DEF_FILE)..."
 	$(RPCGEN) $(RPCGENFLAGS) $(RPC_DEF_FILE)
 
-# -------------------
 # Compilar servidor P2P (cliente RPC)
-# -------------------
 $(SERVER_P2P_OBJ): $(SERVER_P2P_SRC) $(RPC_HEADER)
 	$(CXX) $(CXXFLAGS_WITH_SEAL) -c $(SERVER_P2P_SRC) -o $(SERVER_P2P_OBJ)
 
@@ -69,18 +63,14 @@ $(TARGET_SERVER_P2P): $(SERVER_P2P_OBJ) $(RPC_CLIENT_OBJ) $(RPC_XDR_OBJ)
 	$(CXX) $^ -o $@ $(LDFLAGS_WITH_SEAL) $(RPCLIBS)
 	@echo "Servidor P2P '$(TARGET_SERVER_P2P)' compilado."
 
-# -------------------
 # Compilar RPC client y xdr
-# -------------------
 $(RPC_CLIENT_OBJ): $(RPC_CLIENT_SRC) $(RPC_HEADER)
 	$(CC) $(CFLAGS_WITH_RPC) -c $(RPC_CLIENT_SRC) -o $(RPC_CLIENT_OBJ)
 
 $(RPC_XDR_OBJ): $(RPC_XDR_SRC) $(RPC_HEADER)
 	$(CC) $(CFLAGS_WITH_RPC) -c $(RPC_XDR_SRC) -o $(RPC_XDR_OBJ)
 
-# -------------------
 # Compilar servidor RPC
-# -------------------
 $(RPC_SERVER_SKELETON_OBJ): $(RPC_SERVER_SKELETON_SRC) $(RPC_HEADER)
 	$(CC) $(CFLAGS_WITH_RPC) -c $(RPC_SERVER_SKELETON_SRC) -o $(RPC_SERVER_SKELETON_OBJ)
 
@@ -91,9 +81,7 @@ $(TARGET_RPC_LOGGER_SERVER): $(RPC_SERVER_SKELETON_OBJ) $(RPC_SERVER_IMPL_OBJ) $
 	$(CXX) $^ -o $@ $(LDFLAGS_WITH_SEAL) $(RPCLIBS)
 	@echo "Servidor RPC '$(TARGET_RPC_LOGGER_SERVER)' compilado."
 
-# -------------------
 # Limpiar todo
-# -------------------
 clean:
 	@echo "Limpiando archivos generados..."
 	rm -f $(TARGET_SERVER_P2P) $(TARGET_RPC_LOGGER_SERVER)

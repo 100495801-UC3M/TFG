@@ -31,7 +31,6 @@
         </div>
     </div>
 
-    <!-- TODO 1: Aviso si el servidor SEAL falló en el último voto -->
     {% if session.get('seal_error') %}
         <div class="error" style="margin-bottom:16px;">
             ⚠️ Ha habido un error al actualizar las estadísticas cifradas en el servidor.
@@ -102,7 +101,6 @@
 
                             <div class="button-group">
                                 {% if ended %}
-                                    <!-- TODO 4: Encuesta terminada → solo estadísticas -->
                                     <button onclick="window.location.href='/stats/{{ encode_survey_id(survey.id) }}'">
                                         📊 Ver Estadísticas
                                     </button>
@@ -116,7 +114,6 @@
                                             style="background-color:#ccc;cursor:not-allowed;">
                                         Ya votaste
                                     </button>
-                                    <!-- TODO 3: Botón de estadísticas para encuestas votadas -->
                                     <button class="secondary"
                                             onclick="window.location.href='/stats/{{ encode_survey_id(survey.id) }}'">
                                         📊 Estadísticas
@@ -192,7 +189,6 @@
                             <button onclick="window.location.href='/edit_survey/{{ encode_survey_id(survey.id) }}'">
                                 Editar
                             </button>
-                            <!-- TODO 3: Botón de estadísticas -->
                             <button class="secondary"
                                     onclick="window.location.href='/stats/{{ encode_survey_id(survey.id) }}'">
                                 📊 Estadísticas
@@ -228,7 +224,6 @@
         {% endif %}
     </div>
 
-    <!-- TODO 5: Encuestas donde soy admin -->
     {% if admin_surveys %}
         <div class="survey-section">
             <h2>Encuestas donde soy Admin</h2>

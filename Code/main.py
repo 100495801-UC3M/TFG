@@ -21,8 +21,6 @@ from app.survey_helpers import (
     send_surveys_to_server,
     trigger_seal_for_survey
 )
-# TODO Quitar para mensajes
-from app.messages import Messages
 from flask import Flask, render_template, request, redirect, url_for, session, abort, flash
 
 
@@ -37,7 +35,6 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=5)
 
 # Inicializamos las bases de datos y sus tablas
 users_db                = Users()
-#messages_db            = Messages()
 survey_db               = Survey()
 surveyAdmins_db         = SurveyAdmins(survey_db.connection)
 surveyWhitelist_db      = SurveyWhitelist(survey_db.connection)
@@ -48,12 +45,6 @@ submittedAnswers_db     = SubmittedAnswers(survey_db.connection)
 statistics_db           = Statistics(survey_db.connection)
 session_private_key_db  = Session_private_key(survey_db.connection)
 registration_token_db   = Registration_token(survey_db.connection)
-
-
-# Inicializamos las variables globales
-# Nota: pending_registrations y reset_tokens ahora se almacenan en BD
-# pending_registrations = {}  # usar registration_token_db.save_registration_token()
-# reset_tokens = {}  # usar registration_token_db.save_registration_token()
 
 # Clave secreta para realizar búsquedas de elementos cifrados
 SECRET_KEY = security.load_search_secret()
@@ -66,17 +57,12 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 registration_token_db.cleanup_expired_tokens()
 session_private_key_db.cleanup_expired_sessions()
 
-# ── Cliente SEAL ──────────────────────────────────────────────────────────────
+# Cliente SEAL
 cliente_seal = Cliente()
 
 app.jinja_env.globals["encode_survey_id"] = lambda sid: security.encode_survey_id(sid, SECRET_KEY)
 app.jinja_env.globals["survey_is_ended"] = survey_db.is_ended
 app.jinja_env.globals["survey_not_started"] = lambda survey: not survey_db.is_started(survey)
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Se importan y usan con parámetros de BD pasados explícitamente
-# ═════════════════════════════════════════════════════════════════════════════════
 
 
 route = "/"
@@ -273,13 +259,13 @@ def home():
             
             return redirect(url_for("home"))
  
-    # ── Paginación ────────────────────────────────────
+    # Paginación
     ITEMS_PER_PAGE = 5
     page_my = max(1, int(request.args.get("page_my", 1)))
     page_admin = max(1, int(request.args.get("page_admin", 1)))
     page_search = max(1, int(request.args.get("page_search", 1)))
     
-    # ── Datos para el template ────────────────────────────────────
+    # Datos para el template
     # Mis encuestas
     total_user_surveys = survey_db.count_user_surveys(username)
     total_pages_my = (total_user_surveys + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE
@@ -356,8 +342,6 @@ def list_users():
     # Función para eliminar un usuario
     if request.method == "POST" and "delete" in request.form:
         user_deleted = request.form.get("username")
-        # TODO Quitar para mensajes
-        # messages_db.remove_messages(user_deleted)
         users_db.remove_user(user_deleted)
         logging.info("El usuario se ha eliminado de la tabla de datos correctamente.")
 
@@ -369,54 +353,6 @@ def list_users():
     users = users_db.list_users()
 
     return render_template("users.html", users=users)
-
-
-# PÁGINA EXCLUSIVA PARA ADMINS: Acceder a la lista de mensajes
-# TODO Quitar para mensajes
-r"""route = re.sub(r"^(\/).*", r"\1messages", route)
-@app.route(route, methods=["GET", "POST"])
-def list_messages():
-    # Ruta de lista de mensajes
-    if "username" not in session:
-        abort(404)
-    
-    if session["role"] != "admin":
-        abort(404)
-    
-    messages = messages_db.list_messages()
-    messages_list = []
-
-    for m in messages:
-        messages_list.append(dict(m))
-
-    # Para descifrar mensaje (solo para enseñar en la defensa)
-    if request.method == "POST":
-        message_id = request.form.get("id")
-        message = messages_db.get_message(message_id)
-        
-        # Recuperar clave privada de BD
-        session_id = session.get("session_id")
-        private_key_serialized = session_private_key_db.get_session_private_key(session_id) if session_id else None
-        if not private_key_serialized:
-            abort(401)  # No autorizado
-        
-        private_key = security.deserialize_private_key(private_key_serialized)
-
-        user = users_db.check_user(session["username"], "name")
-        route = user["certificate"]
-        public_key = security.get_public_key_from_certificate(route)
-
-        message = security.check_messages(message, session["username"], public_key, private_key)
-
-        if message != "error":
-            for m in messages_list:
-                if int(m["id"]) == int(message_id):
-                    m["text"] = message[0][2]
-        
-        return render_template("messages.html", messages=messages_list)
-    
-    return render_template("messages.html", messages=messages_list)"""
-
 
 # Página para acceder a tu propio perfil
 route = re.sub(r"^(\/).*", r"\1/profile", route)
@@ -465,8 +401,6 @@ def profile():
 
         # Función para eliminar el usuario
         if request.method == "POST" and "delete_account" in request.form:
-            # TODO Quitar para mensajes
-            #messages_db.remove_messages(session["username"])
             users_db.remove_user(session["username"])
             session.clear()
             return redirect(url_for("index"))
@@ -565,14 +499,14 @@ def confirm_register(token):
             return v  # Si falla, devolver tal cual (era string)
 
     result = users_db.add_user(
-        _decode(data["DNI"]),           # dni_index (HMAC) → puede ser str, _decode lo deja igual si falla
-        _decode(data["DNI_search"]),    # dni_encrypted → bytes originales
-        data["name"],                   # siempre fue str
-        _decode(data["email"]),         # email_index
-        _decode(data["email_search"]), # email_encrypted → bytes originales
-        _decode(data["hashed_password"]),  # hash → bytes originales ← CAUSA DEL BUG
-        data["salt"],                   # ya era base64 str, la BD lo guarda así
-        _decode(data["private_key"]),  # private_key_encrypted → bytes originales
+        _decode(data["DNI"]),
+        _decode(data["DNI_search"]),
+        data["name"],
+        _decode(data["email"]),
+        _decode(data["email_search"]),
+        _decode(data["hashed_password"]),
+        data["salt"],
+        _decode(data["private_key"]),
     )
 
     registration_token_db.delete_registration_token(token)
@@ -704,7 +638,7 @@ def create_survey():
             description = request.form.get("survey_description", "").strip()
             start_at    = request.form.get("start_at", "").strip()
             end_at      = request.form.get("end_at", "").strip()
-            visibility  = request.form.get("visibility", "y")   # ← nombre real del campo
+            visibility  = request.form.get("visibility", "y")
 
             is_public, privacy_mode, access_code = parse_visibility(visibility)
 
@@ -1146,11 +1080,6 @@ def edit_survey(survey_token):
         admins=admins, whitelist=whitelist,
         survey=dict(survey), questions=questions, error=None, info=None)
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# BÚSQUEDA DE ENCUESTAS POR CÓDIGO
-# ═══════════════════════════════════════════════════════════════════════════════
-
 @app.route("/search_survey_by_code", methods=["GET", "POST"])
 def search_survey_by_code():
     """Permite buscar y acceder a encuestas protegidas por código."""
@@ -1266,7 +1195,6 @@ def vote_survey(survey_token):
 
                 seal_ok = trigger_seal_for_survey(survey_id, questions_db, survey_db, submittedAnswers_db, statistics_db, cliente_seal)
                 if not seal_ok:
-                    # Mensaje no bloqueante – el voto ya se guardó en BD
                     logging.warning(f"Fallo en SEAL para encuesta {survey_id}. "
                                     "Las estadísticas cifradas no se actualizaron.")
                     session["seal_error"] = True

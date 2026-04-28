@@ -107,7 +107,7 @@ procesar_certificado() {
     return 0
 }
 
-# ============ INICIO DEL SCRIPT ============
+# INICIO DEL SCRIPT
 
 # Contar solicitudes disponibles
 SOLICITUDES_COUNT=$(ls -1 "$SOLICITUDES_DIR"/*.pem 2>/dev/null | wc -l)

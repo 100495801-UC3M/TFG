@@ -22,7 +22,6 @@
         {% endif %}
     </div>
 
-    <!-- TODO 2: Acceso denegado (whitelist) -->
     {% if access_denied %}
         <div class="error">
             🔒 {{ access_reason }}
@@ -35,7 +34,6 @@
             </form>
         </div>
 
-    <!-- TODO 2: Formulario de código de acceso -->
     {% elif needs_code_form %}
         <div class="survey-info" style="border-left-color:#ffc107;background:#fff8e1;">
             <h3>🔐 Esta encuesta es privada</h3>

@@ -1,6 +1,5 @@
-# =========================================
 # CONFIGURACIÓN GLOBAL
-# =========================================
+
 CPP_SEAL_DIR   = cpp/seal
 CPP_SERVER_DIR = cpp/server
 SEAL_VERSION   = v4.1.1
@@ -16,23 +15,17 @@ CMAKE_FLAGS = -DSEAL_BUILD_DEPS=ON \
               -DSEAL_THROW_ON_TRANSPARENT_CIPHERTEXT=OFF \
               -DCMAKE_BUILD_TYPE=Release
 
-# =========================================
 # TARGET POR DEFECTO
-# =========================================
+
 all: seal server
 
-# =========================================
 # DEPENDENCIAS
-# =========================================
 deps:
 	@echo "Instalando dependencias del sistema..."
 	@echo "  ⚠  Ejecuta este target con sudo: sudo make deps"
 	apt install -y build-essential gcc g++ make cmake git
 
-# =========================================
 # SEAL
-# Compila e instala SEAL en /usr/local (necesario una sola vez).
-# =========================================
 seal:
 	@if [ ! -f "$(SEAL_DIR)/CMakeLists.txt" ]; then \
 		echo "Clonando SEAL $(SEAL_VERSION) en $(SEAL_DIR)..."; \
@@ -65,26 +58,20 @@ seal-install:
 
 
 
-# =========================================
 # PROYECTO CMAKE
-# =========================================
 server:
 	@echo "Compilando proyecto CMake..."
 	CC=$(CC) CXX=$(CXX) cmake -S "$(CPP_SEAL_DIR)" -B "$(PROJECT_BUILD)"
 	cmake --build "$(PROJECT_BUILD)" -j$$(nproc)
 	@echo "Proyecto compilado. Binarios en $(PROJECT_BUILD)/"
 
-# =========================================
 # EJECUTAR
-# =========================================
 run-server:
 	@echo "Iniciando servidor SEAL completo..."
 	"$(PROJECT_BUILD)/servidor_seal"
 
 
-# =========================================
 # CLEAN
-# =========================================
 clean-server:
 	rm -rf "$(PROJECT_BUILD)"
 	@echo "Build del server eliminado."

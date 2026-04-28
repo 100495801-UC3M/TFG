@@ -29,16 +29,12 @@ import logging
 import tenseal.sealapi as seal
 
 
-# ──────────────────────────────────────────────
-#  Configuración de red
-# ──────────────────────────────────────────────
+# Configuración de red
 HOST = "127.0.0.1"
 PORT = 8080
 
 
-# ══════════════════════════════════════════════
-#  SEAL helpers (funciones globales)
-# ══════════════════════════════════════════════
+# SEAL helpers (funciones globales)
 
 def _crear_contexto():
     """Parámetros idénticos a los del servidor (servidor_seal.cpp)."""
@@ -86,9 +82,7 @@ def _deserializar_ct(context, data):
             os.unlink(path)
 
 
-# ══════════════════════════════════════════════
-#  Socket helpers (funciones globales)
-# ══════════════════════════════════════════════
+# Socket helpers (funciones globales)
 
 def _enviar_bloque(sock, data: bytes):
     """Envía uint64_t(tamaño) + datos (little-endian)."""
@@ -113,9 +107,7 @@ def _recv_exacto(sock, n: int) -> bytes:
     return bytes(buf)
 
 
-# ══════════════════════════════════════════════
-#  Cliente SEAL
-# ══════════════════════════════════════════════
+# Cliente SEAL
 
 class Cliente:
     """
@@ -237,9 +229,7 @@ class Cliente:
             return None
 
 
-# ══════════════════════════════════════════════
-#  Main (para testing)
-# ══════════════════════════════════════════════
+# Main (para testing)
 
 def main():
     """Test de la clase Cliente."""

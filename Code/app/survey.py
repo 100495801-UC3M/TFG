@@ -278,7 +278,7 @@ class Survey:
         """, (username, username)).fetchone()
         return result["count"]
 
-    # ── Estadísticas Python (sin SEAL) ────────────────────────────────────────
+    # Estadísticas Python (sin SEAL)
 
     def get_vote_count(self, survey_id):
         """Total de respuestas enviadas a la encuesta."""

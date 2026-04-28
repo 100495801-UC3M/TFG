@@ -91,10 +91,6 @@ clean-all
 
 # EJECUCCIÓN EN WINDOWS
 
-## Dentro del entorno virtual de Windows, ejecutar: TODO Eliminar
-
-python .\app\client.py
-
 
 ## Para empezar el proyecto
 
