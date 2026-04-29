@@ -441,3 +441,26 @@ def decode_survey_id(token: str, secret: str) -> int | None:
         return s.loads(token)
     except Exception:
         return None
+def generate_survey_key():
+    """Genera clave AES-256 para una encuesta."""
+    return os.urandom(32)
+
+def encrypt_survey_text(text, survey_aes_key):
+    """Cifra una respuesta de texto con la clave AES de la encuesta."""
+    iv = os.urandom(12)
+    cipher = Cipher(algorithms.AES(survey_aes_key), modes.GCM(iv))
+    enc = cipher.encryptor()
+    ct = enc.update(text.encode()) + enc.finalize()
+    return base64.b64encode(iv + enc.tag + ct).decode()
+
+def decrypt_survey_text(encrypted_text, survey_aes_key):
+    """Descifra una respuesta cifrada con encrypt_survey_text."""
+    try:
+        raw = base64.b64decode(encrypted_text)
+        iv, tag, ct = raw[:12], raw[12:28], raw[28:]
+        cipher = Cipher(algorithms.AES(survey_aes_key), modes.GCM(iv, tag))
+        dec = cipher.decryptor()
+        return (dec.update(ct) + dec.finalize()).decode()
+    except Exception as e:
+        logging.error(f"Error al descifrar respuesta de texto: {e}")
+        return None

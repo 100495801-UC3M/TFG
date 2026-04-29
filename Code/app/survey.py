@@ -101,32 +101,38 @@ class Survey:
         self.connection.commit()
 
     def _migrate(self):
-        """Añade columnas nuevas si no existen (migración segura)."""
         migrations = [
             "ALTER TABLE survey ADD COLUMN privacy_mode TEXT DEFAULT 'public'",
             "ALTER TABLE survey ADD COLUMN access_code TEXT",
+            "ALTER TABLE survey ADD COLUMN survey_key TEXT",
         ]
         for sql in migrations:
             try:
                 self.cursor.execute(sql)
                 self.connection.commit()
             except Exception:
-                pass  # La columna ya existe
+                pass
 
     def add_survey(self, creator_id, title, description, start_at, end_at,
-                   is_public='y', privacy_mode='public', access_code=None):
+                is_public='y', privacy_mode='public', access_code=None, survey_key=None):
         try:
             now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             self.cursor.execute(
                 "INSERT INTO survey (creator_id, title, description, is_public, privacy_mode, "
-                "access_code, start_at, end_at, created_at, last_modified) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "access_code, start_at, end_at, created_at, last_modified, survey_key) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (creator_id, title, description, is_public, privacy_mode,
-                 access_code, start_at, end_at, now, now))
+                access_code, start_at, end_at, now, now, survey_key))
             self.connection.commit()
             return self.cursor.lastrowid
         except sqlite3.IntegrityError:
             return False
+        
+    # Obtiene el campo survey_key cifrado de una encuesta.
+    def get_survey_key(self, survey_id):
+        row = self.cursor.execute(
+            "SELECT survey_key FROM survey WHERE id = ?", (survey_id,)).fetchone()
+        return row["survey_key"] if row else None
         
     def get_survey(self, survey_id):
         return self.cursor.execute("SELECT * FROM survey WHERE id = ?", (survey_id,)).fetchone()

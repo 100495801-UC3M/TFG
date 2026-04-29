@@ -54,7 +54,38 @@
 
     <!-- Resultados -->
     <div id="stats-container"></div>
-
+    <!-- ── Preguntas de texto (cifradas, acceso restringido) ── -->
+    {% set text_questions = result_questions | selectattr("type", "equalto", "t") | list %}
+    {% if text_questions and total_votes > 0 %}
+    <div style="margin-top:32px;">
+        <h2 style="border-bottom:2px solid #6f42c1;padding-bottom:10px;font-size:1.1rem;">
+            🔐 Respuestas de texto cifradas
+        </h2>
+        {% for q in text_questions %}
+        <div class="stats-card" style="border-left-color:{% if can_see_text %}#28a745{% else %}#dc3545{% endif %};">
+            <h3>{{ q.title }}</h3>
+            {% if can_see_text %}
+                {% set answers = text_answers.get(q.id | string, []) %}
+                {% if answers %}
+                    {% for answer in answers %}
+                    <div style="background:white;border:1px solid #dee2e6;border-radius:6px;
+                                padding:10px 14px;margin-bottom:8px;font-size:.9rem;">
+                        {{ answer }}
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="no-data">Sin respuestas de texto todavía.</p>
+                {% endif %}
+            {% else %}
+                <div class="text-private" style="background:#fdecea;border-color:#f5c6cb;color:#721c24;">
+                    🔒 No tienes acceso a esta pregunta. Está cifrada aunque la encuesta sea pública.
+                    Solo el creador y los administradores pueden ver el contenido.
+                </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
     {% endif %}
 </div>
 

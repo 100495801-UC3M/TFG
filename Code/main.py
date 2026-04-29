@@ -659,9 +659,15 @@ def create_survey():
                 except ValueError:
                     pass
             
+            # Generar clave AES para esta encuesta y cifrarla con SECRET_KEY del servidor
+            raw_survey_key = security.generate_survey_key()
+            encrypted_survey_key = security.encrypt_field(
+                base64.b64encode(raw_survey_key).decode(), SECRET_KEY)
+
             new_survey_id = survey_db.add_survey(
                 username, title, description, start_at, end_at,
-                is_public, privacy_mode, access_code)     
+                is_public, privacy_mode, access_code,
+                survey_key=encrypted_survey_key)   
                    
             if new_survey_id:
                 logging.info(f"Encuesta '{title}' creada por {username}.")
@@ -1175,6 +1181,16 @@ def vote_survey(survey_token):
 
         # Votación
         if "vote_option" in request.form and not already_voted and not needs_code_form:
+            # Obtener clave AES de la encuesta para cifrar textos
+            encrypted_key_stored = survey_db.get_survey_key(survey_id)
+            survey_aes_key = None
+            if encrypted_key_stored:
+                try:
+                    survey_aes_key = base64.b64decode(
+                        security.decrypt_field(encrypted_key_stored, SECRET_KEY))
+                except Exception:
+                    survey_aes_key = None
+
             demo_group = None
             sub_id = submittedAnswers_db.add_submitted_answer(
                 int(survey_id), user_hash, demo_group)
@@ -1192,6 +1208,13 @@ def vote_survey(survey_token):
                         if val:
                             if q["type"] == "s":
                                 answers_db.add_answer(sub_id, q["id"], int(val), None)
+                            elif q["type"] == "t":
+                                # Cifrar respuesta de texto con clave AES de la encuesta
+                                if survey_aes_key:
+                                    encrypted_val = security.encrypt_survey_text(val, survey_aes_key)
+                                    answers_db.add_answer(sub_id, q["id"], None, encrypted_val)
+                                else:
+                                    answers_db.add_answer(sub_id, q["id"], None, val)
                             else:
                                 answers_db.add_answer(sub_id, q["id"], None, val)
 
@@ -1241,6 +1264,46 @@ def survey_stats(survey_token):
 
     # Submissions con sus respuestas
     all_subs = submittedAnswers_db.get_usurvey_submitted_answers(survey_id)
+    # ── Descifrado de respuestas de texto ───────────────────────────────────
+    can_see_text = is_creator or is_admin
+    text_answers = {}   # {str(question_id): [texto, texto, ...]}
+
+    if can_see_text:
+        encrypted_key_stored = survey_db.get_survey_key(survey_id)
+        survey_aes_key = None
+        if encrypted_key_stored:
+            try:
+                survey_aes_key = base64.b64decode(
+                    security.decrypt_field(encrypted_key_stored, SECRET_KEY))
+            except Exception:
+                survey_aes_key = None
+
+        for q in result_questions:
+            if q["type"] == "t":
+                texts = []
+                for sub in all_subs:
+                    for ans in answers_db.get_answers(dict(sub)["id"]):
+                        a = dict(ans)
+                        if a["question_id"] == q["id"] and a.get("answer"):
+                            if survey_aes_key:
+                                decrypted = security.decrypt_survey_text(
+                                    a["answer"], survey_aes_key)
+                                if decrypted:
+                                    texts.append(decrypted)
+                            else:
+                                texts.append(a["answer"])
+                text_answers[str(q["id"])] = texts
+
+    # Eliminar preguntas de texto del JS (se renderizan aparte en Jinja2)
+    questions_meta = []
+    for q in result_questions:
+        if q["type"] == "t":
+            continue    # ← se gestionan en el template, no en el JS
+        qm = {"id": str(q["id"]), "title": q["title"], "type": q["type"]}
+        if q["type"] in ("s", "m"):
+            qm["options"] = [{"id": o["id"], "text": o["option_text"]}
+                            for o in q.get("options", [])]
+        questions_meta.append(qm)
     submissions_data = []
     for sub in all_subs:
         sub_dict = dict(sub)
@@ -1306,6 +1369,9 @@ def survey_stats(survey_token):
         demo_filters_json    = json.dumps(demo_filters),
         questions_meta_json  = json.dumps(questions_meta),
         encode_survey_id     = lambda sid: security.encode_survey_id(sid, SECRET_KEY),
+        can_see_text     = can_see_text,
+        text_answers     = text_answers,
+        result_questions = result_questions,
     )
 
 if __name__ == "__main__":
