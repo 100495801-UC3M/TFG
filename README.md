@@ -97,9 +97,8 @@ clean-all
 python .\main.py
 
 
-# OBTENCIÓN DE CLIENT_SECRET
 
-## Configuración del correo (Gmail API + OAuth2), si se ejecuta por primera vez o si el token ha expirado:
+# Configuración del correo (Gmail API + OAuth2), si se ejecuta por primera vez o si el token ha expirado:
 
 1. Ir a https://console.cloud.google.com:
    - Elegir proyecto existente (TFG)
@@ -118,3 +117,8 @@ python .\main.py
 ### Archivos necesarios en ./config para que funcione bien
 - `client_secret.json` — descargado de Google Cloud Console (no subir a git)
 - `token_store.json`   — generado automáticamente tras autorizar (no subir a git)
+
+## Script para aceptar los certificados:
+
+cd AC
+bash aprobar_solicitudes.sh

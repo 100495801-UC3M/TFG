@@ -1,6 +1,5 @@
 import sqlite3
-import secrets
-from datetime import datetime, timedelta
+from datetime import datetime
 
 class Survey:
     def __init__(self, db_name="./db/survey.db"):
@@ -85,18 +84,6 @@ class Survey:
                 stat_type               TEXT DEFAULT 'sum' CHECK(stat_type IN ('sum','average')),
                 value                   TEXT,
                 FOREIGN KEY (survey_id) REFERENCES survey(id) ON DELETE CASCADE);
-
-            CREATE TABLE IF NOT EXISTS session_private_key (
-                session_id              TEXT PRIMARY KEY,
-                private_key             TEXT NOT NULL,
-                created_at              TEXT NOT NULL,
-                expires_at              TEXT NOT NULL);
-
-            CREATE TABLE IF NOT EXISTS registration_token (
-                token                   TEXT PRIMARY KEY,
-                data                    TEXT NOT NULL,
-                created_at              TEXT NOT NULL,
-                expires_at              TEXT NOT NULL);
         ''')
         self.connection.commit()
 
@@ -336,7 +323,7 @@ class Survey:
         """, (survey_id, question_id)).fetchall()
         return [r["answer"] for r in rows]
 
-    # Función para cambiar la base de datos
+    # Función para cambiar la base de datos ejecutando en este .py
     def changes_to_database(self, command):
         self.cursor.execute(command)
         self.connection.commit()
@@ -593,7 +580,7 @@ class SubmittedAnswers:
             "SELECT * FROM submitted_answer WHERE user_hash = ? AND survey_id = ?",
             (user_hash, survey_id)).fetchone()
     
-    def get_usurvey_submitted_answers(self, survey):
+    def get_survey_submitted_answers(self, survey):
         return self.cursor.execute(
             "SELECT * FROM submitted_answer WHERE survey_id = ?",
             (survey,)).fetchall()
@@ -681,87 +668,6 @@ class Statistics:
         for t in ["sum", "average"]:
             self.add_value(survey_id, demographic_group, t)
 
-class Session_private_key:
-    def __init__(self, connection):
-        self.connection = connection
-        self.connection.row_factory = sqlite3.Row
-        self.cursor = self.connection.cursor()
-
-    def get_session_private_key(self, session_id):
-        """Obtiene la clave privada de un session_id."""
-        result = self.cursor.execute(
-            "SELECT private_key FROM session_private_key WHERE session_id = ? AND expires_at > ?",
-            (session_id, datetime.now().isoformat())
-        ).fetchone()
-        if result:
-            return result["private_key"]
-        return None
-
-    def delete_session_private_key(self, session_id):
-        """Elimina la clave privada de un session_id."""
-        self.cursor.execute("DELETE FROM session_private_key WHERE session_id = ?", (session_id,))
-        self.connection.commit()
-
-    def cleanup_expired_sessions(self):
-        """Limpia sesiones expiradas."""
-        now = datetime.now().isoformat()
-        self.cursor.execute("DELETE FROM session_private_key WHERE expires_at < ?", (now,))
-        self.connection.commit()
-        
-    def save_session_private_key(self, session_id, private_key):
-        """Guarda la clave privada asociada a un session_id."""
-        now = datetime.now().isoformat()
-        expires_at = (datetime.now() + timedelta(hours=1)).isoformat()  # Expira en 1 hora
-        self.cursor.execute(
-            "INSERT OR REPLACE INTO session_private_key (session_id, private_key, created_at, expires_at) VALUES (?, ?, ?, ?)",
-            (session_id, private_key, now, expires_at)
-        )
-        self.connection.commit()
-
-
-class Registration_token:
-    def __init__(self, connection):
-        self.connection = connection
-        self.connection.row_factory = sqlite3.Row
-        self.cursor = self.connection.cursor()
-
-    def save_registration_token(self, token, data, expires_at):
-        """Guarda un token de registro con sus datos en BD."""
-        import json
-        data_json = json.dumps(data)
-        now = datetime.now().isoformat()
-        self.cursor.execute(
-            "INSERT INTO registration_token (token, data, created_at, expires_at) VALUES (?, ?, ?, ?)",
-            (token, data_json, now, expires_at)
-        )
-        self.connection.commit()
-
-    def get_registration_token(self, token):
-        """Obtiene los datos de un token de registro."""
-        import json
-        result = self.cursor.execute(
-            "SELECT data, expires_at FROM registration_token WHERE token = ?",
-            (token,)
-        ).fetchone()
-        if result:
-            return {
-                "data": json.loads(result["data"]),
-                "expires_at": result["expires_at"]
-            }
-        return None
-
-    def delete_registration_token(self, token):
-        """Elimina un token de registro."""
-        self.cursor.execute("DELETE FROM registration_token WHERE token = ?", (token,))
-        self.connection.commit()
-
-    def cleanup_expired_tokens(self):
-        """Limpia tokens de registro expirados."""
-        now = datetime.now().isoformat()
-        self.cursor.execute("DELETE FROM registration_token WHERE expires_at < ?", (now,))
-        self.connection.commit()
-
 if __name__ == "__main__":
     survey_db = Survey()
-    survey_db.changes_to_database(
-        "UPDATE users SET role='admin' WHERE name='mario1';")
+    survey_db.changes_to_database("")

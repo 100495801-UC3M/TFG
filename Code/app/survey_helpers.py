@@ -3,6 +3,8 @@ app/survey_helpers.py — Funciones auxiliares para gestión de encuestas
 """
 import secrets
 import logging
+import base64
+
 
 _questions_db = None
 _question_options_db = None
@@ -61,7 +63,7 @@ def check_survey_access(survey, username, survey_admins_db, survey_whitelist_db)
     return False, "No tienes acceso a esta encuesta."
 
 
-def build_numeric_stats_list(survey_id, questions_db, survey_db, submitted_answers_db):
+def build_numeric_stats_list(survey_id, questions_db, survey_db):
     """
     Construye lista de estadísticas numéricas: [0, 478, 0, 2, ...]
     con ceros para preguntas no-numéricas.
@@ -132,14 +134,14 @@ def send_surveys_to_server(survey_id, demographic_group, answers_plain,
 
 
 def trigger_seal_for_survey(survey_id, questions_db, survey_db,
-                             submittedAnswers_db, statistics_db, cliente_seal):
+                             statistics_db, cliente_seal):
     """
     Itera las preguntas numéricas de la encuesta y calcula estadísticas cifradas.
     Se invoca tras cada nueva votación.
     """
     try:
         stats_list = build_numeric_stats_list(
-            survey_id, questions_db, survey_db, submittedAnswers_db)
+            survey_id, questions_db, survey_db)
 
         if not stats_list or sum(stats_list) == 0:
             logging.debug(f"Sin datos numéricos para encuesta {survey_id}")
@@ -153,3 +155,10 @@ def trigger_seal_for_survey(survey_id, questions_db, survey_db,
     except Exception as e:
         logging.error(f"Error en trigger_seal_for_survey: {e}")
         return False
+    
+# Decodificar los campos que originalmente eran bytes
+def decode(v):
+    try:
+        return base64.urlsafe_b64decode(v)
+    except Exception:
+        return v  # Si falla, devolver tal cual (era string)

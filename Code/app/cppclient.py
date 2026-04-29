@@ -66,22 +66,6 @@ def _serializar_ct(ct):
         if os.path.exists(path):
             os.unlink(path)
 
-
-def _deserializar_ct(context, data):
-    """Deserializa bytes a un ciphertext SEAL."""
-    fd, path = tempfile.mkstemp(suffix=".ct")
-    os.close(fd)
-    try:
-        with open(path, "wb") as f:
-            f.write(data)
-        ct = seal.Ciphertext()
-        ct.load(context, path)
-        return ct
-    finally:
-        if os.path.exists(path):
-            os.unlink(path)
-
-
 # Socket helpers (funciones globales)
 
 def _enviar_bloque(sock, data: bytes):

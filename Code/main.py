@@ -9,16 +9,16 @@ import uuid
 import secrets
 from datetime import timedelta, datetime
 import app.security as security
-from app.users import Users
+from app.users import Users,  Session_private_key, Registration_token
 from app.cppclient import Cliente
-from app.survey import Survey, SurveyAdmins, SurveyWhitelist, Questions, QuestionOptions
-from app.survey import Answers, SubmittedAnswers, Statistics, Session_private_key, Registration_token
+from app.survey import Survey, SurveyAdmins, SurveyWhitelist, Questions, QuestionOptions, Answers, SubmittedAnswers, Statistics
 from app.survey_helpers import (
     init_helpers,
     load_questions_with_options,
     parse_visibility,
     check_survey_access,
-    trigger_seal_for_survey
+    trigger_seal_for_survey,
+    decode
 )
 from flask import Flask, render_template, request, redirect, url_for, session, abort, flash
 
@@ -62,7 +62,10 @@ session_private_key_db.cleanup_expired_sessions()
 # Cliente SEAL
 cliente_seal = Cliente()
 
+# Funciones globales para usar en cualquier template con Jinja
+# Para usar el ID de una encuesta codeada como <a href="/stats/{{ encode_survey_id(survey.id) }}">
 app.jinja_env.globals["encode_survey_id"] = lambda sid: security.encode_survey_id(sid, SECRET_KEY)
+# Comprobar si en una encuesta empezó su votación ya o acabó
 app.jinja_env.globals["survey_is_ended"] = survey_db.is_ended
 app.jinja_env.globals["survey_not_started"] = lambda survey: not survey_db.is_started(survey)
 
@@ -277,6 +280,7 @@ def home():
     total_admin_surveys = survey_db.count_surveys_as_admin(username)
     total_pages_admin = (total_admin_surveys + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE
     admin_surveys = survey_db.get_surveys_as_admin(username, limit=ITEMS_PER_PAGE, offset=(page_admin-1)*ITEMS_PER_PAGE)
+
     # Encuestas donde estoy en la lista blanca
     total_whitelist_surveys = survey_db.count_surveys_as_whitelist(username)
     total_pages_whitelist = (total_whitelist_surveys + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE
@@ -298,6 +302,7 @@ def home():
         found_surveys = survey_db.get_public_surveys(user_searched, limit=ITEMS_PER_PAGE, offset=(page_search-1)*ITEMS_PER_PAGE)
         if not found_surveys:
             message = f"El usuario '{user_searched}' no tiene encuestas públicas."
+
         # Marcar qué encuestas ya ha votado el usuario actual
         for s in found_surveys:
             user_hash = security.generate_user_hash(s["id"], username, SECRET_KEY)
@@ -426,7 +431,7 @@ def authorize():
     with open("./config/client_secret.json") as f:
         config = json.load(f)["web"]
 
-    # La redirect_uri debe coincidir EXACTAMENTE con la de Google Cloud Console
+    # La redirect_uri debe coincidir con la de Google Cloud Console
     redirect_uri = config["redirect_uris"][0]
 
     auth_url = (
@@ -493,22 +498,15 @@ def confirm_register(token):
 
     data = token_info["data"]
 
-    # Decodificar los campos que originalmente eran bytes
-    def _decode(v):
-        try:
-            return base64.urlsafe_b64decode(v)
-        except Exception:
-            return v  # Si falla, devolver tal cual (era string)
-
     result = users_db.add_user(
-        _decode(data["DNI"]),
-        _decode(data["DNI_search"]),
+        decode(data["DNI"]),
+        decode(data["DNI_search"]),
         data["name"],
-        _decode(data["email"]),
-        _decode(data["email_search"]),
-        _decode(data["hashed_password"]),
+        decode(data["email"]),
+        decode(data["email_search"]),
+        decode(data["hashed_password"]),
         data["salt"],
-        _decode(data["private_key"]),
+        decode(data["private_key"]),
     )
 
     registration_token_db.delete_registration_token(token)
@@ -525,7 +523,7 @@ def forgot_password():
         identifier = request.form["identifier"].strip()
         type = users_db.identifier_type(identifier)
         if type == "DNI" or type == "email":
-            identifier = security.make_search_index(identifier, SECRET_KEY)  # HMAC, no encrypt
+            identifier = security.make_search_index(identifier, SECRET_KEY) # HMAC, no encrypt
         user = users_db.check_user(identifier, type)
 
         success = "Si el usuario existe, recibirás un correo con las instrucciones."
@@ -659,7 +657,7 @@ def create_survey():
                 except ValueError:
                     pass
             
-            # Generar clave AES para esta encuesta y cifrarla con SECRET_KEY del servidor
+            # Generar clave AES para esta encuesta y cifrarla con SECRET_KEY del servidor, para las preguntas con texto
             raw_survey_key = security.generate_survey_key()
             encrypted_survey_key = security.encrypt_field(
                 base64.b64encode(raw_survey_key).decode(), SECRET_KEY)
@@ -686,7 +684,7 @@ def create_survey():
             is_required    = True if is_demographic else request.form.get("is_required") is not None
             options = [o.strip() for o in request.form.getlist("options[]") if o.strip()]
             
-            # El título es obligatorio solo si quieres agregar la pregunta
+            # El título es obligatorio si quieres agregar la pregunta
             if not question_title:
                 questions = load_questions_with_options(int(survey_id))
                 survey_token = security.encode_survey_id(survey_id, SECRET_KEY) if survey_id else None
@@ -774,6 +772,7 @@ def create_survey():
                 admins=admins, whitelist=whitelist,
                 survey=dict(survey), questions=questions, info="Orden actualizado.")
         
+        # Gestionar whitelist
         if "add_whitelist" in request.form and survey_id:
             wl_name = request.form.get("whitelist_username", "").strip().lower()
             wl_user = users_db.check_user(wl_name, "name")
@@ -815,6 +814,7 @@ def create_survey():
                 admins=admins, whitelist=whitelist,
                 error=None, info=f"'{wl_to_remove}' eliminado de la lista blanca.")
         
+        # Gestionar admins
         if "add_admin" in request.form and survey_id:
             admin_name = request.form.get("admin_username", "").strip().lower()
             admin_user = users_db.check_user(admin_name, "name")
@@ -844,6 +844,7 @@ def create_survey():
                 survey=dict(survey), questions=questions,
                 admins=admins, whitelist=whitelist,
                 error=None, info=f"'{admin_name}' añadido como admin.")
+        
         if "remove_admin" in request.form and survey_id:
             admin_to_remove = request.form.get("admin_to_remove")
             surveyAdmins_db.remove_admin(int(survey_id), admin_to_remove)
@@ -855,7 +856,6 @@ def create_survey():
                 survey=dict(survey), questions=questions,
                 admins=admins, whitelist=whitelist,
                 error=None, info="Admin eliminado correctamente.")
-        
         
         # Cancelar (volver a home)
         if "cancel" in request.form:
@@ -1012,6 +1012,7 @@ def edit_survey(survey_token):
                 admins=admins, whitelist=whitelist,
                 survey=dict(survey), questions=questions, info="Orden actualizado.")
         
+        # Gestionar admins
         if "add_admin" in request.form:
             admin_name = request.form.get("admin_username", "").strip().lower()
             admin_user = users_db.check_user(admin_name, "name")
@@ -1047,6 +1048,7 @@ def edit_survey(survey_token):
                 admins=admins, whitelist=whitelist,
                 info=f"El usuario '{admin_to_remove}' ha sido eliminado.", error=None)
 
+        # Gestionar whitelist
         if "add_whitelist" in request.form:
             wl_name = request.form.get("whitelist_username", "").strip().lower()
             wl_user = users_db.check_user(wl_name, "name")
@@ -1218,7 +1220,7 @@ def vote_survey(survey_token):
                             else:
                                 answers_db.add_answer(sub_id, q["id"], None, val)
 
-                seal_ok = trigger_seal_for_survey(survey_id, questions_db, survey_db, submittedAnswers_db, statistics_db, cliente_seal)
+                seal_ok = trigger_seal_for_survey(survey_id, questions_db, survey_db, statistics_db, cliente_seal)
                 if not seal_ok:
                     logging.warning(f"Fallo en SEAL para encuesta {survey_id}. "
                                     "Las estadísticas cifradas no se actualizaron.")
@@ -1263,7 +1265,7 @@ def survey_stats(survey_token):
     result_questions      = [dict(q) for q in questions if not dict(q).get("is_demographic")]
 
     # Submissions con sus respuestas
-    all_subs = submittedAnswers_db.get_usurvey_submitted_answers(survey_id)
+    all_subs = submittedAnswers_db.get_survey_submitted_answers(survey_id)
     # ── Descifrado de respuestas de texto ───────────────────────────────────
     can_see_text = is_creator or is_admin
     text_answers = {}   # {str(question_id): [texto, texto, ...]}
@@ -1294,16 +1296,6 @@ def survey_stats(survey_token):
                                 texts.append(a["answer"])
                 text_answers[str(q["id"])] = texts
 
-    # Eliminar preguntas de texto del JS (se renderizan aparte en Jinja2)
-    questions_meta = []
-    for q in result_questions:
-        if q["type"] == "t":
-            continue    # ← se gestionan en el template, no en el JS
-        qm = {"id": str(q["id"]), "title": q["title"], "type": q["type"]}
-        if q["type"] in ("s", "m"):
-            qm["options"] = [{"id": o["id"], "text": o["option_text"]}
-                            for o in q.get("options", [])]
-        questions_meta.append(qm)
     submissions_data = []
     for sub in all_subs:
         sub_dict = dict(sub)

@@ -1,3 +1,1 @@
 Falta probar flujos de trabajo
-Limpiar codigo
-Añadir funciones que pueda separar de main a survey_helpers
