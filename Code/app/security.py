@@ -409,7 +409,7 @@ def make_search_index(value, SECRET_KEY):
     return tag
 
 def encrypt_field(value, server_key):
-    """Cifra un campo con AES-GCM para almacenamiento."""
+    """Encripta DNI, email y survey key usando AES-GCM"""
     iv = os.urandom(12)
     cipher = Cipher(algorithms.AES(server_key), modes.GCM(iv))
     enc = cipher.encryptor()
@@ -432,6 +432,7 @@ def generate_user_hash(survey_id, username, SECRET_KEY):
     return user_hash
 
 def encode_survey_id(survey_id: int, secret: str) -> str:
+    """Para no mostrar el survey id (como por ejemplo en el http)"""
     s = URLSafeSerializer(secret, salt="survey-id")
     return s.dumps(survey_id)
 
@@ -441,8 +442,9 @@ def decode_survey_id(token: str, secret: str) -> int | None:
         return s.loads(token)
     except Exception:
         return None
+
 def generate_survey_key():
-    """Genera clave AES-256 para una encuesta."""
+    """Genera clave AES-256 para crear una encuesta."""
     return os.urandom(32)
 
 def encrypt_survey_text(text, survey_aes_key):
