@@ -228,6 +228,10 @@ class Registration_token:
         self.connection.commit()
 
 if __name__ == "__main__":
+    import sys
     users = Users(db_name="../db/users.db")
-    users.changes_to_database("UPDATE users SET role='admin' WHERE name='mario1';")   
+    if len(sys.argv) == 3:
+        identifier = sys.argv[1]
+        certificate = sys.argv[2]
+        users.update_certificate(identifier, certificate)
         
