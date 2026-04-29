@@ -541,12 +541,12 @@ def forgot_password():
             to_email = security.decrypt_field(user["email_search"], SECRET_KEY)
             subject = "Recuperación de contraseña - AGULE"
             body = (
-                f"Hola, {user["name"]}\n\n"
-                f"Hemos recibido una solicitud para cambiar la contraseña de tu cuenta.\n\n"
-                f"Haz clic en el siguiente enlace para establecer una nueva contraseña:\n\n"
-                f"{reset_url}\n\n"
-                f"Este enlace expirará en 5 minutos.\n\n"
-                f"Si no has solicitado este cambio, ignora este mensaje."
+                f'Hola, {user["name"]}\n\n'
+                f'Hemos recibido una solicitud para cambiar la contraseña de tu cuenta.\n\n'
+                f'Haz clic en el siguiente enlace para establecer una nueva contraseña:\n\n'
+                f'{reset_url}\n\n'
+                f'Este enlace expirará en 5 minutos.\n\n'
+                f'Si no has solicitado este cambio, ignora este mensaje.'
             )
             try:
                 security.send_email_gmail_api(from_email, to_email, subject, body)
