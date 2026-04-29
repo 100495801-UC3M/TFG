@@ -14,11 +14,10 @@ from app.cppclient import Cliente
 from app.survey import Survey, SurveyAdmins, SurveyWhitelist, Questions, QuestionOptions
 from app.survey import Answers, SubmittedAnswers, Statistics, Session_private_key, Registration_token
 from app.survey_helpers import (
+    init_helpers,
     load_questions_with_options,
     parse_visibility,
     check_survey_access,
-    build_numeric_stats_list,
-    send_surveys_to_server,
     trigger_seal_for_survey
 )
 from flask import Flask, render_template, request, redirect, url_for, session, abort, flash
@@ -45,6 +44,9 @@ submittedAnswers_db     = SubmittedAnswers(survey_db.connection)
 statistics_db           = Statistics(survey_db.connection)
 session_private_key_db  = Session_private_key(survey_db.connection)
 registration_token_db   = Registration_token(survey_db.connection)
+
+# Inicializamos survey_helpers
+init_helpers(questions_db, questionOptions_dn)
 
 # Clave secreta para realizar búsquedas de elementos cifrados
 SECRET_KEY = security.load_search_secret()

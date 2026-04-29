@@ -1,7 +1,27 @@
 """
 app/survey_helpers.py — Funciones auxiliares para gestión de encuestas
 """
+_questions_db = None
+_question_options_db = None
 
+def init_helpers(questions_db, question_options_db):
+    global _questions_db, _question_options_db
+    _questions_db = questions_db
+    _question_options_db = question_options_db
+
+def load_questions_with_options(survey_id, questions_db=None, question_options_db=None):
+    qdb  = questions_db or _questions_db
+    qodb = question_options_db or _question_options_db
+    questions = qdb.list_questions(survey_id)
+    questions_list = []
+    for question in questions:
+        question_dict = dict(question)
+        if question_dict["type"] in ["s", "m"]:
+            question_dict["options"] = qodb.list_options(question_dict["id"])
+        else:
+            question_dict["options"] = []
+        questions_list.append(question_dict)
+    return questions_list
 
 def load_questions_with_options(survey_id, questions_db, question_options_db):
     """Carga las preguntas de una encuesta e incluye sus opciones."""
