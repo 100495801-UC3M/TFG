@@ -764,4 +764,4 @@ class Registration_token:
 if __name__ == "__main__":
     survey_db = Survey()
     survey_db.changes_to_database(
-        "ALTER TABLE question ADD COLUMN is_required BOOL DEFAULT 1;")
+        "UPDATE users SET role='admin' WHERE name='mario1';")
