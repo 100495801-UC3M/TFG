@@ -61,7 +61,12 @@ seal-install:
 # PROYECTO CMAKE
 server:
 	@echo "Compilando proyecto CMake..."
-	CC=$(CC) CXX=$(CXX) cmake -S "$(CPP_SEAL_DIR)" -B "$(PROJECT_BUILD)"
+	if [ -f "$(SEAL_BUILD)/cmake/SEALConfig.cmake" ]; then \
+		EXTRA_CMAKE_FLAGS="-DCMAKE_PREFIX_PATH=$(SEAL_BUILD)"; \
+	else \
+		EXTRA_CMAKE_FLAGS=""; \
+	fi; \
+	CC=$(CC) CXX=$(CXX) cmake -S "$(CPP_SEAL_DIR)" -B "$(PROJECT_BUILD)" $$EXTRA_CMAKE_FLAGS
 	cmake --build "$(PROJECT_BUILD)" -j$$(nproc)
 	@echo "Proyecto compilado. Binarios en $(PROJECT_BUILD)/"
 
