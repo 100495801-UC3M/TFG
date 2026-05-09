@@ -12,6 +12,7 @@ import hashlib
 
 from itsdangerous import URLSafeSerializer  # viene con Flask, para las URL
 from app.users import Users
+from app.config_manager import get_config_manager
 from datetime import datetime
 from cryptography import x509
 from cryptography.exceptions import InvalidSignature
@@ -311,18 +312,17 @@ def send_email_gmail_api(from_email: str, to_email: str, subject: str, body: str
     # 3. Construir payload
     payload = {"raw": message_base64}
 
-    # 4. Leer token_data de token_store.json
-    with open("./config/token_store.json") as f:
-        token_data = json.load(f)
+    # 4. Obtener token_data desde config manager (desencriptado)
+    config_manager = get_config_manager()
+    token_data = config_manager.get_token_store()
     
     # Verificar expiración y refrescar si procede
     expires_at = token_data.get("expires_at")
     if expires_at and time.time() >= expires_at:
         new_token = refresh_access_token()
         token_data.update(new_token)
-        # Guardar el token actualizado en token_store.json
-        with open("./config/token_store.json", "w") as f:
-            json.dump(token_data, f)
+        # Guardar el token actualizado (encriptado)
+        config_manager.save_token_store(token_data)
     
     access_token = token_data.get("access_token")
 
@@ -342,9 +342,8 @@ def send_email_gmail_api(from_email: str, to_email: str, subject: str, body: str
         # Refrescar si da error
         new_token = refresh_access_token()
         token_data.update(new_token)
-        # Guardar el token actualizado en token_store.json
-        with open("./config/token_store.json", "w") as f:
-            json.dump(token_data, f)
+        # Guardar el token actualizado (encriptado)
+        config_manager.save_token_store(token_data)
         access_token = token_data.get("access_token")
 
         headers["Authorization"] = f"Bearer {access_token}"
@@ -358,14 +357,12 @@ def send_email_gmail_api(from_email: str, to_email: str, subject: str, body: str
     return response.status_code, response.text
 
 def refresh_access_token():
-
-    # client_id y client_secret -> client_secret.json
-    with open("./config/client_secret.json") as f:
-        config = json.load(f)["web"]
-
-    # refresh_token -> token_store.json
-    with open("./config/token_store.json") as f:
-        token_store = json.load(f)
+    """Refresca el token de acceso OAuth2."""
+    config_manager = get_config_manager()
+    
+    # Obtener credenciales desde config manager (desencriptadas)
+    config = config_manager.get_client_secret()
+    token_store = config_manager.get_token_store()
 
     url = "https://oauth2.googleapis.com/token"
 
@@ -377,7 +374,6 @@ def refresh_access_token():
     }
 
     response = requests.post(url, data=data)
-    print(response.text)
     response.raise_for_status()
 
     token_data = response.json()
@@ -388,19 +384,9 @@ def refresh_access_token():
     }
 
 def load_search_secret():
-    secret_path = "./config/search_secret.key"
-    
-    if os.path.exists(secret_path):
-        with open(secret_path, "rb") as f:
-            return f.read().strip()
-    
-    # Si no existe, generarla automáticamente y guardarla
-    secret = os.urandom(32)
-    os.makedirs("./config", exist_ok=True)
-    with open(secret_path, "wb") as f:
-        f.write(secret)
-    logging.warning("search_secret.key generada automáticamente en config/")
-    return secret
+    """Obtiene la clave secreta para búsquedas desde config manager."""
+    config_manager = get_config_manager()
+    return config_manager.get_search_secret()
 
 def make_search_index(value, SECRET_KEY):
     """Genera un índice ciego determinista para búsquedas."""

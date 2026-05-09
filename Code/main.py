@@ -9,6 +9,7 @@ import uuid
 import secrets
 from datetime import timedelta, datetime
 import app.security as security
+from app.config_manager import initialize_config, get_config_manager
 from app.users import Users,  Session_private_key, Registration_token
 from app.cppclient import Cliente
 from app.survey import Survey, SurveyAdmins, SurveyWhitelist, Questions, QuestionOptions, Answers, SubmittedAnswers, Statistics
@@ -32,6 +33,15 @@ app.secret_key = os.urandom(24)
 # Límite de sesión de 5 minutos
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=5)
 
+# Configuración logging para que se muestre en la consola
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+# ===== INICIALIZACIÓN DE CLAVE MAESTRA =====
+# Se pide una sola vez al iniciar el programa
+logging.info("Inicializando gestor de configuración...")
+initialize_config()
+logging.info("✓ Configuración cargada y desencriptada correctamente.")
+
 # Inicializamos las bases de datos y sus tablas
 users_db                = Users()
 survey_db               = Survey()
@@ -50,10 +60,6 @@ init_helpers(questions_db, questionOptions_dn)
 
 # Clave secreta para realizar búsquedas de elementos cifrados
 SECRET_KEY = security.load_search_secret()
-
-
-# Configuración logging para que se muestre en la consola
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 # Limpiar tokens y sesiones expiradas al iniciar
 registration_token_db.cleanup_expired_tokens()
@@ -428,8 +434,8 @@ def logout():
 
 @app.route("/authorize")
 def authorize():
-    with open("./config/client_secret.json") as f:
-        config = json.load(f)["web"]
+    config_manager = get_config_manager()
+    config = config_manager.get_client_secret()
 
     # La redirect_uri debe coincidir con la de Google Cloud Console
     redirect_uri = config["redirect_uris"][0]
@@ -458,8 +464,8 @@ def oauth2callback():
     if not code:
         return "No se recibió código de autorización", 400
 
-    with open("./config/client_secret.json") as f:
-        config = json.load(f)["web"]
+    config_manager = get_config_manager()
+    config = config_manager.get_client_secret()
 
     redirect_uri = config["redirect_uris"][0]
 
@@ -478,10 +484,10 @@ def oauth2callback():
     token_data = response.json()
     token_data["expires_at"] = time.time() + token_data.get("expires_in", 3600)
 
-    with open("./config/token_store.json", "w") as f:
-        json.dump(token_data, f, indent=2)
+    # Guardar token de forma encriptada
+    config_manager.save_token_store(token_data)
 
-    logging.info("Token OAuth2 guardado correctamente.")
+    logging.info("✓ Token OAuth2 guardado y encriptado correctamente.")
     return redirect(url_for("index"))
 
 @app.route("/confirm/<token>")
