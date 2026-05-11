@@ -2,9 +2,22 @@
 # BIENVENIDO AL README DE AGULE
 El entorno virtual en Linux que se usará es WSL. Esto es sirve para simular que el servidor se encuentra en Linux mientras los clientes usan Windows o cualquier otro sistema operativo.
 
+# ARCHIVOS INICIALES
+Primero, clona este repositorio en la carpeta local en el que lo quieras mantener.
+Después, copia los siguientes archivos que no deben estar subidos a la nube, pero están guardados:
+/Code/AC/privado/ca1key.pem                -> Clave privada de la CA para firmar certificados
+/Code/config/AC.txt                        -> Contraseña maestra en claro + usuarios registrados
+/Code/config/cert.pem                      -> Certificado TLS del servidor Flask
+/Code/config/key.pem                       -> Clave privada TLS del servidor Flask
+/Code/config/salt.bin                      -> Salt PBKDF2 de la contraseña maestra
 
-Guía provista por:
-https://learn.microsoft.com/es-es/windows/wsl/install
+Los siguientes archivos se encuentran subidos encriptados. No son necesario copiarlos.
+
+/Code/config/client_secret.json            -> Credenciales OAuth de Google (Gmail API)
+/Code/config/token_store.json              -> Token de acceso actual de Gmail
+/Code/config/search_secret.key             -> Clave secreta para realizar búsquedas
+
+
 
 # INICIO: Instalación y configuración de WSL.
 
