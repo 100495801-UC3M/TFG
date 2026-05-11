@@ -36,7 +36,6 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=5)
 # Configuración logging para que se muestre en la consola
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-# ===== INICIALIZACIÓN DE CLAVE MAESTRA =====
 # Se pide una sola vez al iniciar el programa
 logging.info("Inicializando gestor de configuración...")
 initialize_config()
@@ -1374,7 +1373,9 @@ def survey_stats(survey_token):
 
 if __name__ == "__main__":
     # Para muestra en la defensa se ha creado un certificado autofirmado para que la web aparezca como insegura
-    app.run(ssl_context=("config/cert.pem", "config/key.pem"), debug=True)
+    # El use_reloader=False es para que no te pida dos veces la contraseña maestra, ya que en True
+    # al hacer debug, hace un proceso hijo.
+    app.run(ssl_context=("config/cert.pem", "config/key.pem"), debug=True, use_reloader=False)
 
     # Si se desea quitar:
     # app.run(debug=True)

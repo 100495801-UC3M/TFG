@@ -32,7 +32,7 @@ class ConfigManager:
         """
         if password is None:
             password = getpass.getpass(
-                "🔐 Introduce tu contraseña maestra para desencriptar la configuración: "
+                "Introduce tu contraseña maestra para desencriptar la configuración: "
             )
         
         # Derivar la clave maestra usando PBKDF2
