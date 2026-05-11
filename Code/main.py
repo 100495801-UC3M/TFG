@@ -40,7 +40,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 # Se pide una sola vez al iniciar el programa
 logging.info("Inicializando gestor de configuración...")
 initialize_config()
-logging.info("✓ Configuración cargada y desencriptada correctamente.")
+logging.info("Configuración cargada y desencriptada correctamente.")
 
 # Inicializamos las bases de datos y sus tablas
 users_db                = Users()
@@ -487,7 +487,7 @@ def oauth2callback():
     # Guardar token de forma encriptada
     config_manager.save_token_store(token_data)
 
-    logging.info("✓ Token OAuth2 guardado y encriptado correctamente.")
+    logging.info("Token OAuth2 guardado correctamente.")
     return redirect(url_for("index"))
 
 @app.route("/confirm/<token>")

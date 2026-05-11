@@ -53,10 +53,14 @@ class ConfigManager:
             backend=default_backend()
         )
         self.master_key = kdf.derive(password.encode())
-        logging.info("✓ Clave maestra derivada correctamente.")
+        logging.info("Clave maestra derivada correctamente.")
         
         # Cargar o crear archivos encriptados
-        self._load_or_encrypt_configs()
+        try:
+            self._load_or_encrypt_configs()
+        except ValueError as e:
+            logging.critical(str(e))
+            raise SystemExit("Contraseña maestra incorrecta. Saliendo.")
     
     def _load_or_encrypt_configs(self):
         """Carga archivos desencriptados o los encripta si no existen."""
@@ -64,7 +68,6 @@ class ConfigManager:
             "search_secret": "./config/search_secret.key",
             "client_secret": "./config/client_secret.json",
             "token_store": "./config/token_store.json",
-            "ac_password": "./config/AC.txt",
         }
         
         for key, filepath in config_files.items():
@@ -73,19 +76,20 @@ class ConfigManager:
             # Si existe la versión encriptada, desencriptarla
             if os.path.exists(encrypted_path):
                 self.config_data[key] = self._decrypt_file(encrypted_path)
-                logging.info(f"✓ {key} desencriptado desde {encrypted_path}")
-            # Si existe el original sin encriptar, encriptarlo
+                logging.info(f"{key} desencriptado desde {encrypted_path}")
+            # Si existe el original sin encriptar, encriptarlo y eliminar el original
             elif os.path.exists(filepath):
                 with open(filepath, "rb") as f:
                     content = f.read()
-                self._encrypt_file(filepath, encrypted_path, content)
+                self._encrypt_file(filepath, content)
                 self.config_data[key] = content
-                logging.info(f"✓ {key} encriptado y guardado en {encrypted_path}")
-                # Opcional: eliminar archivo original
+                logging.info(f"{key} encriptado y guardado en {encrypted_path}")
                 # os.remove(filepath)
+                # logging.info(f"{key} cifrado y original eliminado.")
     
-    def _encrypt_file(self, source_path, dest_path, data):
+    def _encrypt_file(self, path, data):
         """Encripta datos usando AES-GCM."""
+        path += ".encrypted"
         iv = os.urandom(12)
         cipher = Cipher(
             algorithms.AES(self.master_key),
@@ -97,29 +101,36 @@ class ConfigManager:
         tag = encryptor.tag
         
         # Guardar: IV (12 bytes) + TAG (16 bytes) + CIPHERTEXT
-        with open(dest_path, "wb") as f:
+        with open(path, "wb") as f:
             f.write(iv + tag + ciphertext)
-        logging.debug(f"Archivo encriptado: {dest_path}")
+        logging.debug(f"Archivo encriptado: {path}")
     
     def _decrypt_file(self, encrypted_path):
-        """Desencripta archivos con AES-GCM."""
-        with open(encrypted_path, "rb") as f:
-            data = f.read()
+        try:
+            """Desencripta archivos con AES-GCM."""
+            with open(encrypted_path, "rb") as f:
+                data = f.read()
+            
+            # Extraer IV (12 bytes), TAG (16 bytes), CIPHERTEXT (resto)
+            iv = data[:12]
+            tag = data[12:28]
+            ciphertext = data[28:]
+            
+            cipher = Cipher(
+                algorithms.AES(self.master_key),
+                modes.GCM(iv, tag),
+                backend=default_backend()
+            )
+            decryptor = cipher.decryptor()
+            plaintext = decryptor.update(ciphertext) + decryptor.finalize()
+            return plaintext
         
-        # Extraer IV (12 bytes), TAG (16 bytes), CIPHERTEXT (resto)
-        iv = data[:12]
-        tag = data[12:28]
-        ciphertext = data[28:]
+        except Exception:
+            raise ValueError(
+                f"Error al desencriptar {encrypted_path}. "
+                "¿Contraseña maestra incorrecta?"
+            )
         
-        cipher = Cipher(
-            algorithms.AES(self.master_key),
-            modes.GCM(iv, tag),
-            backend=default_backend()
-        )
-        decryptor = cipher.decryptor()
-        plaintext = decryptor.update(ciphertext) + decryptor.finalize()
-        
-        return plaintext
     
     def get_search_secret(self):
         """Obtiene la clave secreta para búsquedas."""
@@ -149,36 +160,12 @@ class ConfigManager:
         except (json.JSONDecodeError, UnicodeDecodeError):
             return {}
     
-    def get_ac_password(self):
-        """Obtiene la contraseña de AC."""
-        if "ac_password" not in self.config_data:
-            return None
-        try:
-            content = self.config_data["ac_password"].decode()
-            # Extraer primera línea después de ':'
-            for line in content.split('\n'):
-                if 'Contraseña para firmas' in line:
-                    continue
-                if ':' in line:
-                    return line.split(':')[1].strip()
-        except (UnicodeDecodeError, IndexError):
-            logging.error("Error leyendo contraseña de AC")
-        return None
-    
     def save_token_store(self, token_data):
         """Guarda tokens OAuth desencriptados."""
-        encrypted_path = "./config/token_store.json.encrypted"
         data_bytes = json.dumps(token_data, indent=2).encode()
         self.config_data["token_store"] = data_bytes
-        self._encrypt_file("./config/token_store.json", encrypted_path, data_bytes)
-        logging.info("✓ Token store guardado y encriptado.")
-    
-    def save_search_secret(self, secret):
-        """Guarda la clave secreta de búsqueda."""
-        encrypted_path = "./config/search_secret.key.encrypted"
-        self.config_data["search_secret"] = secret
-        self._encrypt_file("./config/search_secret.key", encrypted_path, secret)
-        logging.info("✓ Search secret guardado y encriptado.")
+        self._encrypt_file("./config/token_store.json", data_bytes)
+        logging.info("Token store guardado y encriptado.")
 
 
 # Instancia global
