@@ -146,7 +146,8 @@ class ConfigManager:
         if "client_secret" not in self.config_data:
             return None
         try:
-            return json.loads(self.config_data["client_secret"].decode())
+            raw = json.loads(self.config_data["client_secret"].decode())
+            return raw.get("installed") or raw.get("web") or raw
         except (json.JSONDecodeError, UnicodeDecodeError):
             logging.error("Error desencriptando client_secret.json")
             return None
