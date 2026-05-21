@@ -39,20 +39,6 @@ body {
     color: black;
 }
 
-.messages {
-    display: flex;
-    flex-direction: column;
-    width: 75%;
-    padding: 10px;
-    flex-direction: column;
-}
-
-.message_container {
-    display: flex;
-    margin-top: 5px;
-    padding: 5px;
-}
-
 .message {
     padding: 7px;
     border-radius: 6px;
