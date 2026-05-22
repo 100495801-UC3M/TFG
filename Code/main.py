@@ -645,7 +645,7 @@ def create_survey():
             end_at      = request.form.get("end_at", "").strip()
             visibility  = request.form.get("visibility", "y")
 
-            is_public, privacy_mode, access_code = parse_visibility(visibility)
+            privacy_mode, access_code = parse_visibility(visibility)
 
             if not title:
                 return render_template("create_survey.html", username=username, survey_id=None, 
@@ -669,7 +669,7 @@ def create_survey():
 
             new_survey_id = survey_db.add_survey(
                 username, title, description, start_at, end_at,
-                is_public, privacy_mode, access_code,
+                privacy_mode, access_code,
                 survey_key=encrypted_survey_key)   
                    
             if new_survey_id:
@@ -916,11 +916,11 @@ def edit_survey(survey_token):
                 except ValueError:
                     pass
 
-            is_public, privacy_mode, new_code = parse_visibility(visibility)
+            privacy_mode, new_code = parse_visibility(visibility)
             if privacy_mode == 'code' and new_code is None:
                 new_code = survey["access_code"]
 
-            survey_db.modify_survey(survey_id, start_at, end_at, is_public, privacy_mode, new_code)
+            survey_db.modify_survey(survey_id, start_at, end_at, privacy_mode, new_code)
             logging.info(f"Encuesta {survey_id} editada por {username}.")
             survey    = survey_db.get_survey(survey_id)
             questions = load_questions_with_options(survey_id)
@@ -1259,7 +1259,7 @@ def survey_stats(survey_token):
 
     is_creator = survey["creator_id"] == username
     is_admin   = surveyAdmins_db.is_admin(survey_id, username)
-    is_public  = survey["is_public"] == 'y'
+    is_public  = survey["privacy_mode"] == 'public'
     if not (is_creator or is_admin or is_public):
         abort(403)
 

@@ -16,7 +16,6 @@ class Survey:
                 creator_id              INTEGER NOT NULL,
                 title                   VARCHAR(200) NOT NULL,
                 description             TEXT,
-                is_public               CHAR(1) DEFAULT 'y' CHECK(is_public IN ('y','n')),
                 privacy_mode            TEXT DEFAULT 'public',
                 access_code             TEXT,
                 start_at                TEXT,
@@ -101,14 +100,14 @@ class Survey:
                 pass
 
     def add_survey(self, creator_id, title, description, start_at, end_at,
-                is_public='y', privacy_mode='public', access_code=None, survey_key=None):
+                privacy_mode='public', access_code=None, survey_key=None):
         try:
             now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             self.cursor.execute(
-                "INSERT INTO survey (creator_id, title, description, is_public, privacy_mode, "
+                "INSERT INTO survey (creator_id, title, description, privacy_mode, "
                 "access_code, start_at, end_at, created_at, last_modified, survey_key) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (creator_id, title, description, is_public, privacy_mode,
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (creator_id, title, description, privacy_mode,
                 access_code, start_at, end_at, now, now, survey_key))
             self.connection.commit()
             return self.cursor.lastrowid
@@ -129,18 +128,18 @@ class Survey:
         return self.cursor.execute(
             "SELECT * FROM survey WHERE access_code = ?", (access_code,)).fetchone()
 
-    def modify_survey(self, survey_id, start, end, is_public,
+    def modify_survey(self, survey_id, start, end,
                       privacy_mode=None, access_code=None):
         if privacy_mode is not None:
             self.cursor.execute(
-                "UPDATE survey SET start_at=?, end_at=?, is_public=?, privacy_mode=?, "
+                "UPDATE survey SET start_at=?, end_at=?, privacy_mode=?, "
                 "access_code=?, last_modified=? WHERE id=?",
-                (start, end, is_public, privacy_mode, access_code,
+                (start, end, privacy_mode, access_code,
                  datetime.now().strftime("%Y-%m-%d %H:%M:%S"), survey_id))
         else:
             self.cursor.execute(
-                "UPDATE survey SET start_at=?, end_at=?, is_public=?, last_modified=? WHERE id=?",
-                (start, end, is_public,
+                "UPDATE survey SET start_at=?, end_at=?, last_modified=? WHERE id=?",
+                (start, end,
                  datetime.now().strftime("%Y-%m-%d %H:%M:%S"), survey_id))
         self.connection.commit()
 
@@ -198,16 +197,16 @@ class Survey:
         """Obtiene encuestas públicas de un usuario con paginación opcional."""
         if limit:
             return self.cursor.execute(
-                "SELECT * FROM survey WHERE creator_id = ? AND is_public = 'y' ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                "SELECT * FROM survey WHERE creator_id = ? AND privacy_mode = 'public' ORDER BY created_at DESC LIMIT ? OFFSET ?",
                 (username, limit, offset)).fetchall()
         return self.cursor.execute(
-            "SELECT * FROM survey WHERE creator_id = ? AND is_public = 'y' ORDER BY created_at DESC",
+            "SELECT * FROM survey WHERE creator_id = ? AND privacy_mode = 'public' ORDER BY created_at DESC",
             (username,)).fetchall()
     
     def count_public_surveys(self, username):
         """Cuenta total de encuestas públicas de un usuario."""
         result = self.cursor.execute(
-            "SELECT COUNT(*) as count FROM survey WHERE creator_id = ? AND is_public = 'y'", 
+            "SELECT COUNT(*) as count FROM survey WHERE creator_id = ? AND privacy_mode = 'public'", 
             (username,)).fetchone()
         return result["count"]
 

@@ -49,7 +49,7 @@
             <label for="visibility">Visibilidad</label>
             <select id="visibility" name="visibility">
                 <option value="y"
-                    {% if survey.is_public == 'y' %}selected{% endif %}>
+                    {% if survey.privacy_mode == 'public' %}selected{% endif %}>
                     🌐 Pública
                 </option>
                 <option value="whitelist"

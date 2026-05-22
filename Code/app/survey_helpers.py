@@ -31,14 +31,14 @@ def load_questions_with_options(survey_id, questions_db=None, question_options_d
 
 
 def parse_visibility(form_value):
-    """Convierte el valor del select de visibilidad en (is_public, privacy_mode, access_code)."""
+    """Convierte el valor del select de visibilidad en (privacy_mode, access_code)."""
     if form_value == 'y':
-        return 'y', 'public', None
+        return 'public', None
     elif form_value == 'whitelist':
-        return 'n', 'whitelist', None
+        return 'whitelist', None
     elif form_value == 'code':
-        return 'n', 'code', secrets.token_urlsafe(8)
-    return 'n', 'public', None
+        return 'code', secrets.token_urlsafe(8)
+    return 'public', None
 
 
 def check_survey_access(survey, username, survey_admins_db, survey_whitelist_db):
