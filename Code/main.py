@@ -392,7 +392,7 @@ def profile():
             if not security.check_password(new_password):
                 error = ("La contraseña es inválida. Debe tener al menos 6 "
                         "caracteres, una mayúscula, una minúscula, un número y "
-                        "un carácter especial ($!%*?&_¿@#=-). No puede incluir "
+                        "un carácter especial ($!%*?&_¿#=-). No puede incluir "
                         "espacios.")
                 return render_template("profile.html", username=username, error=error)
             
@@ -587,7 +587,7 @@ def reset_password(token):
         if not security.check_password(new_password):
             error = ("La contraseña es inválida. Debe tener al menos 6 caracteres, "
                      "una mayúscula, una minúscula, un número y un carácter especial "
-                     "($!%*?&_¿@#=-). No puede incluir espacios.")
+                     "($!%*?&_¿#=-). No puede incluir espacios.")
             return render_template("reset_password.html", error=error, token=token)
 
         if new_password != new_password2:
@@ -1117,7 +1117,10 @@ def search_survey_by_code():
                 error = "No se encontró encuesta con ese código."
             else:
                 # Encuesta encontrada, redirigir a la página de votación
-                survey_token = security.encode_survey_id(survey["id"], SECRET_KEY)
+                survey_id = survey["id"]
+                # Guardar en sesión que el código fue verificado
+                session[f"code_ok_{survey_id}"] = True
+                survey_token = security.encode_survey_id(survey_id, SECRET_KEY)
                 return redirect(url_for("vote_survey", survey_token=survey_token))
     
     return render_template("search_survey_by_code.html",
