@@ -16,17 +16,6 @@
         <div>
             <h1>Buscar Encuesta por Código</h1>
         </div>
-        <div class="header-buttons">
-            {% if username %}
-                <button onclick="window.location.href='/home'" class="secondary">Volver</button>
-                <form action="/logout" method="POST" style="display:inline;">
-                    <button type="submit" class="secondary">Cerrar sesión</button>
-                </form>
-            {% else %}
-                <button onclick="window.location.href='/login'" class="secondary">Login</button>
-                <button onclick="window.location.href='/register'" class="secondary">Registro</button>
-            {% endif %}
-        </div>
     </div>
 
     <!-- Mensajes de error -->

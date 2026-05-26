@@ -234,4 +234,8 @@ if __name__ == "__main__":
         identifier = sys.argv[1]
         certificate = sys.argv[2]
         users.update_certificate(identifier, certificate)
+    if len(sys.argv) == 2:
+        user = sys.argv[1]
+        users.promote_user(user)
+        print("Usuario promovido")
         
