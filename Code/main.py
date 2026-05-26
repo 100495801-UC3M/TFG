@@ -103,7 +103,7 @@ def register():
         if not security.check_password(password):
             error = ("La contraseña es inválida. Debe tener al menos 6 "
                      "caracteres, una mayúscula, una minúscula, un número y "
-                     "un carácter especial ($!%*?&_¿@#=-). No puede incluir "
+                     "un carácter especial ($!%*?&_¿#=-). No puede incluir "
                      "espacios.")
             return render_template("register.html", error=error)
 
