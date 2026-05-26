@@ -45,7 +45,7 @@ def check_password(password):
     if (re.search(r"[A-Z]", password) and  # Al menos una letra mayúscula
             re.search(r"[a-z]", password) and  # Al menos una letra minúscula
             re.search(r"\d", password, re.ASCII) and  # Al menos un número
-            re.search(r"[$!%*?&_¿@#=-]", password)):  # Al menos un carácter especial
+            re.search(r"[$!%*?&_¿#=-]", password)):  # Al menos un carácter especial
         return True
     else:
         return False
