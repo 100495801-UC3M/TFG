@@ -70,7 +70,6 @@ class Survey:
                 question_id             INTEGER NOT NULL,
                 option_id               INTEGER,
                 answer                  TEXT,
-                UNIQUE (submitted_answer_id, question_id),
                 FOREIGN KEY (submitted_answer_id) REFERENCES submitted_answer(id) ON DELETE CASCADE,
                 FOREIGN KEY (question_id) REFERENCES question(id) ON DELETE CASCADE,
                 FOREIGN KEY (option_id) REFERENCES question_option(id) ON DELETE CASCADE);
