@@ -105,13 +105,15 @@
                                         📊 Ver Estadísticas
                                     </button>
                                 {% elif not_started %}
-                                    <button disabled
-                                            style="background-color:#ccc;cursor:not-allowed;">
+                                    <button disabled style="background-color:#ccc;cursor:not-allowed;">
                                         Próximamente
                                     </button>
+                                    <button class="secondary"
+                                            onclick="window.location.href='/stats/{{ encode_survey_id(survey.id) }}'">
+                                        📊 Estadísticas
+                                    </button>
                                 {% elif survey.id in voted_ids %}
-                                    <button disabled
-                                            style="background-color:#ccc;cursor:not-allowed;">
+                                    <button disabled style="background-color:#ccc;cursor:not-allowed;">
                                         Ya votaste
                                     </button>
                                     <button class="secondary"
@@ -121,6 +123,10 @@
                                 {% else %}
                                     <button onclick="window.location.href='/vote_survey/{{ encode_survey_id(survey.id) }}'">
                                         Votar
+                                    </button>
+                                    <button class="secondary"
+                                            onclick="window.location.href='/stats/{{ encode_survey_id(survey.id) }}'">
+                                        📊 Estadísticas
                                     </button>
                                 {% endif %}
                             </div>
