@@ -504,11 +504,11 @@ def confirm_register(token):
     data = token_info["data"]
 
     result = users_db.add_user(
-        decode(data["DNI"]),
+        data["DNI"],
         decode(data["DNI_search"]),
         data["name"],
-        decode(data["email"]),
-        decode(data["email_search"]),
+        data["email"],
+        data["email_search"],
         decode(data["hashed_password"]),
         data["salt"],
         decode(data["private_key"]),
@@ -526,10 +526,10 @@ def confirm_register(token):
 def forgot_password():
     if request.method == "POST":
         identifier = request.form["identifier"].strip()
-        type = users_db.identifier_type(identifier)
-        if type == "DNI" or type == "email":
+        id_type = users_db.identifier_type(identifier)
+        if id_type == "DNI" or id_type == "email":
             identifier = security.make_search_index(identifier, SECRET_KEY) # HMAC, no encrypt
-        user = users_db.check_user(identifier, type)
+        user = users_db.check_user(identifier, id_type)
 
         success = "Si el usuario existe, recibirás un correo con las instrucciones."
 
