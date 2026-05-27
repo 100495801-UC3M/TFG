@@ -896,6 +896,7 @@ def edit_survey(survey_token):
     questions = load_questions_with_options(survey_id)
     admins    = surveyAdmins_db.list_admins(survey_id)
     whitelist = surveyWhitelist_db.list_whitelist(survey_id)
+    total_votes = survey_db.get_vote_count(survey_id)
     
     if request.method == "POST":
         if "edit_survey" in request.form:
@@ -910,7 +911,7 @@ def edit_survey(survey_token):
                         return render_template("edit_survey.html",
                             username=username, survey_id=survey_id,
                             survey=dict(survey), questions=questions,
-                            admins=admins, whitelist=whitelist,
+                            admins=admins, whitelist=whitelist, total_votes = total_votes,
                             error="La fecha de inicio debe ser anterior a la fecha de fin.",
                             info=None)
                 except ValueError:
@@ -927,7 +928,7 @@ def edit_survey(survey_token):
             return render_template("edit_survey.html",
                 username=username, survey_id=survey_id,
                 survey=dict(survey), questions=questions,
-                admins=admins, whitelist=whitelist,
+                admins=admins, whitelist=whitelist, total_votes = total_votes,
                 error=None, info="Encuesta actualizada correctamente.")
         
         # Agregar pregunta a la encuesta
@@ -941,13 +942,13 @@ def edit_survey(survey_token):
             if not question_title:
                 questions = load_questions_with_options(survey_id)
                 return render_template("edit_survey.html", username=username, survey_id=survey_id,
-                    admins=admins, whitelist=whitelist,
+                    admins=admins, whitelist=whitelist, total_votes = total_votes,
                     survey=dict(survey), questions=questions, error="El título de la pregunta es obligatorio.")
             
             if question_type in ["s", "m"] and not options:
                 questions = load_questions_with_options(survey_id)
                 return render_template("edit_survey.html", username=username, survey_id=survey_id,
-                    admins=admins, whitelist=whitelist,
+                    admins=admins, whitelist=whitelist, total_votes = total_votes,
                     survey=dict(survey), questions=questions, error="Las preguntas de opción requieren al menos una opción.")
             
             question_id = questions_db.add_question(survey_id, is_demographic, question_title, question_type, is_required)
@@ -960,7 +961,7 @@ def edit_survey(survey_token):
                 logging.info(f"Pregunta '{question_title}' agregada a encuesta {survey_id} por {username}.")
                 questions = load_questions_with_options(survey_id)
                 return render_template("edit_survey.html", username=username, survey_id=survey_id,
-                    admins=admins, whitelist=whitelist,
+                    admins=admins, whitelist=whitelist, total_votes = total_votes,
                     survey=dict(survey), questions=questions, info="Pregunta agregada correctamente.")
         
         if "update_question" in request.form:
@@ -973,25 +974,32 @@ def edit_survey(survey_token):
             if not edit_title:
                 questions = load_questions_with_options(survey_id)
                 return render_template("edit_survey.html", username=username, survey_id=survey_id,
-                    admins=admins, whitelist=whitelist,
+                    admins=admins, whitelist=whitelist, total_votes = total_votes,
                     survey=dict(survey), questions=questions,
                     error="El título de la pregunta es obligatorio.")
-
+        
             questions_db.update_question(int(question_id), edit_title, edit_type,
                                         edit_is_demographic, edit_is_required)
 
             # Borrar siempre las opciones antiguas y recrear solo si el tipo las necesita
-            questionOptions_dn.remove_all_options(int(question_id))
-            if edit_type in ["s", "m"]:
-                for option_text in request.form.getlist("edit_options[]"):
-                    option_text = option_text.strip()
-                    if option_text:
-                        questionOptions_dn.add_option(int(question_id), option_text)
+            if total_votes == 0:
+                questionOptions_dn.remove_all_options(int(question_id))
+                if edit_type in ["s", "m"]:
+                    for option_text in request.form.getlist("edit_options[]"):
+                        option_text = option_text.strip()
+                        if option_text:
+                            questionOptions_dn.add_option(int(question_id), option_text)
+            else:
+                # Con votos: solo permitir editar el texto de opciones existentes, no recrearlas
+                existing = questionOptions_dn.list_options(int(question_id))
+                new_texts = [o.strip() for o in request.form.getlist("edit_options[]") if o.strip()]
+                for opt, new_text in zip(existing, new_texts):
+                    questionOptions_dn.update_option_text(opt["id"], new_text)
 
             logging.info(f"Pregunta actualizada en encuesta {survey_id} por {username}.")
             questions = load_questions_with_options(survey_id)
             return render_template("edit_survey.html", username=username, survey_id=survey_id,
-                admins=admins, whitelist=whitelist,
+                admins=admins, whitelist=whitelist, total_votes = total_votes,
                 survey=dict(survey), questions=questions, info="Pregunta actualizada correctamente.")
         
         # Eliminar pregunta
@@ -1001,7 +1009,7 @@ def edit_survey(survey_token):
             logging.info(f"Pregunta eliminada de encuesta {survey_id} por {username}.")
             questions = load_questions_with_options(survey_id)
             return render_template("edit_survey.html", username=username, survey_id=survey_id,
-                admins=admins, whitelist=whitelist,
+                admins=admins, whitelist=whitelist, total_votes = total_votes,
                 survey=dict(survey), questions=questions, info="Pregunta eliminada correctamente.")
         
         # Reordenar preguntas
@@ -1014,7 +1022,7 @@ def edit_survey(survey_token):
                 logging.info(f"Preguntas reordenadas en encuesta {survey_id} por {username}.")
             questions = load_questions_with_options(survey_id)
             return render_template("edit_survey.html", username=username, survey_id=survey_id,
-                admins=admins, whitelist=whitelist,
+                admins=admins, whitelist=whitelist, total_votes = total_votes,
                 survey=dict(survey), questions=questions, info="Orden actualizado.")
         
         # Gestionar admins
@@ -1025,14 +1033,14 @@ def edit_survey(survey_token):
                 return render_template("edit_survey.html",
                     username=username, survey_id=survey_id,
                     survey=dict(survey), questions=questions,
-                    admins=admins, whitelist=whitelist,
+                    admins=admins, whitelist=whitelist, total_votes = total_votes,
                     error=f"El usuario '{admin_name}' no existe.", info=None)
             
             if admin_user["name"] == username:
                 return render_template("edit_survey.html",
                     username=username, survey_id=survey_id,
                     survey=dict(survey), questions=questions,
-                    admins=admins, whitelist=whitelist,
+                    admins=admins, whitelist=whitelist, total_votes = total_votes,
                     error="No puedes añadirte a ti mismo como admin.", info=None)
             
             surveyAdmins_db.add_admin(survey_id, admin_user["name"])
@@ -1040,7 +1048,7 @@ def edit_survey(survey_token):
             return render_template("edit_survey.html",
                 username=username, survey_id=survey_id,
                 survey=dict(survey), questions=questions,
-                admins=admins, whitelist=whitelist,
+                admins=admins, whitelist=whitelist, total_votes = total_votes,
                 info=f"El usuario '{admin_name}' añadido como admin.", error=None)
 
         if "remove_admin" in request.form:
@@ -1050,7 +1058,7 @@ def edit_survey(survey_token):
             return render_template("edit_survey.html",
                 username=username, survey_id=survey_id,
                 survey=dict(survey), questions=questions,
-                admins=admins, whitelist=whitelist,
+                admins=admins, whitelist=whitelist, total_votes = total_votes,
                 info=f"El usuario '{admin_to_remove}' ha sido eliminado.", error=None)
 
         # Gestionar whitelist
@@ -1061,7 +1069,7 @@ def edit_survey(survey_token):
                 return render_template("edit_survey.html",
                     username=username, survey_id=survey_id,
                     survey=dict(survey), questions=questions,
-                    admins=admins, whitelist=whitelist,
+                    admins=admins, whitelist=whitelist, total_votes = total_votes,
                     error=f"El usuario '{wl_name}' no existe.", info=None)
             
             surveyWhitelist_db.add_to_whitelist(survey_id, wl_user["name"])
@@ -1069,7 +1077,7 @@ def edit_survey(survey_token):
             return render_template("edit_survey.html",
                 username=username, survey_id=survey_id,
                 survey=dict(survey), questions=questions,
-                admins=admins, whitelist=whitelist,
+                admins=admins, whitelist=whitelist, total_votes = total_votes,
                 info=f"El usuario '{wl_name}' añadido a la lista blanca.", error=None)
 
         if "remove_whitelist" in request.form:
@@ -1078,7 +1086,7 @@ def edit_survey(survey_token):
             return render_template("edit_survey.html",
                 username=username, survey_id=survey_id,
                 survey=dict(survey), questions=questions,
-                admins=admins, whitelist=whitelist,
+                admins=admins, whitelist=whitelist, total_votes = total_votes,
                 info=f"El usuario '{wl_name}' ha sido eliminado de la lista blanca.", error=None)
 
         # Eliminar encuesta completa
@@ -1092,7 +1100,7 @@ def edit_survey(survey_token):
             return redirect(url_for("home"))
     
     return render_template("edit_survey.html", username=username, survey_id=survey_id,
-        admins=admins, whitelist=whitelist,
+        admins=admins, whitelist=whitelist, total_votes = total_votes,
         survey=dict(survey), questions=questions, error=None, info=None)
 
 @app.route("/search_survey_by_code", methods=["GET", "POST"])

@@ -256,36 +256,52 @@
                                 </div>
                                 <div class="form-group">
                                     <label>Tipo:</label>
-                                    <select id="edit-type-{{ question.id }}"
-                                            name="edit_question_type"
-                                            onchange="toggleEditOptions({{ question.id }})">
+                                    <select id="edit-type-{{ question.id }}" name="edit_question_type"
+                                            onchange="toggleEditOptions({{ question.id }})"
+                                            {% if total_votes is defined and total_votes > 0 %}disabled{% endif %}>
                                         <option value="t" {% if question.type=='t' %}selected{% endif %}>Texto abierto</option>
                                         <option value="n" {% if question.type=='n' %}selected{% endif %}>Numérico</option>
                                         <option value="s" {% if question.type=='s' %}selected{% endif %}>Opción única</option>
                                         <option value="m" {% if question.type=='m' %}selected{% endif %}>Opción múltiple</option>
                                     </select>
                                 </div>
-                                <div id="edit-options-group-{{ question.id }}" class="form-group"
-                                    style="display:{% if question.type in ('s','m') %}block{% else %}none{% endif %};">
-                                    <label>Opciones:</label>
-                                    <div id="edit-options-container-{{ question.id }}">
+
+                                {% if total_votes is defined and total_votes > 0 %}
+                                    <!-- Con votos: solo muestra opciones como texto, sin editar -->
+                                    {% if question.type in ('s','m') %}
+                                    <div class="form-group">
+                                        <label>Opciones (no editables con votos existentes):</label>
                                         {% for option in question.options or [] %}
-                                            <div style="display:flex;gap:8px;margin-bottom:8px;">
-                                                <input type="text" name="edit_options[]"
-                                                    value="{{ option.option_text }}"
-                                                    style="flex-grow:1;">
-                                                <button type="button" class="secondary"
-                                                        onclick="removeEditOption(this)"
-                                                        style="width:auto;">✕</button>
-                                            </div>
+                                            <input type="text" value="{{ option.option_text }}"
+                                                disabled style="color:#999;background:#f5f5f5;">
                                         {% endfor %}
                                     </div>
-                                    <button type="button"
-                                            onclick="addEditOption({{ question.id }})"
-                                            class="secondary" style="margin-top:10px;">
-                                        + Agregar Opción
-                                    </button>
-                                </div>
+                                    {% endif %}
+                                    <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:6px;
+                                                padding:10px;margin:10px 0;font-size:.9rem;">
+                                        ⚠️ Esta encuesta tiene votos. Solo puedes editar el título y las propiedades demográficas.
+                                    </div>
+                                {% else %}
+                                    <div id="edit-options-group-{{ question.id }}" class="form-group"
+                                        style="display:{% if question.type in ('s','m') %}block{% else %}none{% endif %};">
+                                        <label>Opciones:</label>
+                                        <div id="edit-options-container-{{ question.id }}">
+                                            {% for option in question.options or [] %}
+                                                <div style="display:flex;gap:8px;margin-bottom:8px;">
+                                                    <input type="text" name="edit_options[]"
+                                                        value="{{ option.option_text }}" style="flex-grow:1;">
+                                                    <button type="button" class="secondary"
+                                                            onclick="removeEditOption(this)"
+                                                            style="width:auto;">✕</button>
+                                                </div>
+                                            {% endfor %}
+                                        </div>
+                                        <button type="button" onclick="addEditOption({{ question.id }})"
+                                                class="secondary" style="margin-top:10px;">
+                                            + Agregar Opción
+                                        </button>
+                                    </div>
+                                {% endif %}
                                 <div class="form-group">
                                     <div class="check-row">
                                         <label>
@@ -307,17 +323,13 @@
                                     </div>
                                 </div>
                                 <div class="form-group">
-                                    <button type="submit" name="update_question" class="primary">
-                                        Actualizar
-                                    </button>
+                                    <button type="submit" name="update_question" class="primary">Actualizar</button>
                                     <button type="button" class="secondary"
-                                            onclick="toggleEditQuestion({{ question.id }})">
-                                        Cancelar
-                                    </button>
+                                            onclick="toggleEditQuestion({{ question.id }})">Cancelar</button>
+                                    {% if total_votes is defined and total_votes== 0 %}
                                     <button type="submit" name="delete_question" class="danger"
-                                            onclick="return confirm('¿Eliminar esta pregunta?');">
-                                        Eliminar
-                                    </button>
+                                            onclick="return confirm('¿Eliminar esta pregunta?');">Eliminar</button>
+                                    {% endif %}
                                 </div>
                             </form>
                         </div>

@@ -329,10 +329,16 @@ function initializeStats(submissions, demoFilters, questionsMeta) {
                     if (state.min !== null && val < state.min) return false;
                     if (state.max !== null && val > state.max) return false;
                 } else {
-                    // Set vacío = sin filtro
-                    if (state.size === 0) continue;
-                    const hasMatch = answers.some(a => state.has(String(a)));
-                    if (!hasMatch) return false;
+                        if (state.size === 0) continue;
+                        if (f.type === 'm') {
+                            // AND: debe haber seleccionado TODAS las opciones marcadas
+                            const allMatch = [...state].every(s => answers.some(a => String(a) === s));
+                            if (!allMatch) return false;
+                        } else {
+                            // OR: basta con que coincida una (para tipo "s" y "t")
+                            const hasMatch = answers.some(a => state.has(String(a)));
+                            if (!hasMatch) return false;
+                        }
                 }
             }
             return true;
@@ -358,19 +364,21 @@ function initializeStats(submissions, demoFilters, questionsMeta) {
 
             if (q.type === 's' || q.type === 'm') {
                 const counts = {};
-                q.options.forEach(o => counts[o.id] = 0);
+                q.options.forEach(o => counts[String(o.id)] = 0);
                 filtered.forEach(sub => {
                     (sub.answers[q.id] || []).forEach(optId => {
-                        if (counts.hasOwnProperty(optId)) counts[optId]++;
+                        const key = String(optId);
+                        if (counts.hasOwnProperty(key)) counts[key]++;
                     });
                 });
                 const total = filtered.length || 1;
                 body = q.options.map(o => {
-                    const cnt = counts[o.id] || 0;
-                    const pct = total > 0 ? (cnt / total * 100).toFixed(1) : '0.0';
+                    const cnt = counts[String(o.id)] || 0;
+                    const pct = (cnt / total * 100).toFixed(1);
+                    const barWidth = Math.min(parseFloat(pct), 100);
                     return `<div class="bar-row">
                         <span class="bar-label">${escHtml(o.text)}</span>
-                        <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+                        <div class="bar-track"><div class="bar-fill" style="width:${barWidth}%"></div></div>
                         <span class="bar-count">${cnt} <span style="color:#aaa;font-weight:400">(${pct}%)</span></span>
                     </div>`;
                 }).join('');

@@ -118,8 +118,10 @@ class Users:
             return "name"
         
     # Función para cambiar la base de datos ejecutando en este .py
-    def changes_to_database(self, command):
-        self.cursor.execute(command)
+    def changes_to_database(self, survey_id):
+        self.cursor.execute("DELETE FROM answer WHERE submitted_answer_id IN "
+            "(SELECT id FROM submitted_answer WHERE survey_id = ?)", (survey_id,))
+        self.cursor.execute("DELETE FROM submitted_answer WHERE survey_id = ?", (survey_id,))
         self.connection.commit()
         print("OK")
 
