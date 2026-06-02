@@ -115,7 +115,7 @@ def register():
         if users_db.check_user(dni_index, "DNI") or users_db.check_user(email_index, "email") or users_db.check_user(name, "name"):
             return render_template("register.html", error="Usuario, email o DNI ya registrado.")
 
-        salt                    = security.generate_salt_aes("salt", 16)
+        salt                    = security.generate_salt_aes()
         dni_encrypted           = security.encrypt_field(DNI, SECRET_KEY)
         email_encrypted         = security.encrypt_field(email, SECRET_KEY)
         hashed_password         = security.hash(password, salt)

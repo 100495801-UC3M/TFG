@@ -51,13 +51,11 @@ def check_password(password):
         return False
 
 
-def generate_salt_aes(procces, number):
+def generate_salt_aes():
     # Generar salt o una clave aes
+    number = 16
     key = os.urandom(number)
-    if procces == "salt":
-        logging.info(f"Salt generado: {key.hex()}, Longitud de clave: {number * 8} bits")
-    else:
-        logging.info(f"Salt generado: {key.hex()}, Longitud de clave: {number * 8} bits")
+    logging.info(f"Salt generado: {key.hex()}, Longitud de clave: {number * 8} bits")
     return key
 
 
@@ -147,45 +145,6 @@ def decrypt_private_key(encrypted_private_key, password, salt):
     )
     return private_key
 
-
-def deserialize_private_key(serialized_private_key):
-    # Deserializar la clave privada
-    private_key = serialization.load_pem_private_key(
-        serialized_private_key.encode("utf-8"),
-        password=None
-    )
-    return private_key
-
-
-
-def encrypt_aes_rsa_key(aes_key, public_key):
-    # Cifrar la clave AES usando la clave pública
-    encrypted_aes_key = public_key.encrypt(
-        aes_key,
-        padding.OAEP(
-            mgf=padding.MGF1(algorithm=hashes.SHA256()),
-            algorithm=hashes.SHA256(),
-            label=None
-        )
-    )
-    logging.info(f"Clave AES cifrada con RSA: {encrypted_aes_key.hex()}")
-    return encrypted_aes_key
-
-
-def decrypt_aes_rsa_key(encrypted_aes_key, private_key):
-    # Descifrar la clave AES usando la clave privada
-    aes_key = private_key.decrypt(
-        encrypted_aes_key,
-        padding.OAEP(
-            mgf=padding.MGF1(algorithm=hashes.SHA256()),
-            algorithm=hashes.SHA256(),
-            label=None
-        )
-    )
-    logging.info(f"Clave AES descifrada con RSA: {aes_key.hex()}")
-    return aes_key
-
-
 def create_request(username, public_key, private_key):
     # Crear una solicitud de certificado
     csr = x509.CertificateSigningRequestBuilder().subject_name(x509.Name([
@@ -268,17 +227,6 @@ def get_public_key_from_certificate(cert_path):
 
     logging.info("Clave pública obtenida del certificado: Longitud %d bits", cert.public_key().key_size)
     return cert.public_key()
-
-
-def get_public_key_from_request(request_path):
-    # Obtener la clave pública de una solicitud de certificado
-    with open(request_path, "rb") as f:
-        csr_data  = f.read()
-    csr = x509.load_pem_x509_csr(csr_data , default_backend())
-    
-    logging.info("Clave pública obtenida: Longitud %d bits", csr.public_key().key_size)
-    return csr.public_key()
-
 
 
 def send_email_gmail_api(from_email: str, to_email: str, subject: str, body: str):
