@@ -51,11 +51,10 @@ def check_password(password):
         return False
 
 
-def generate_salt_aes():
+def generate_salt_aes(size):
     # Generar salt o una clave aes
-    number = 16
-    key = os.urandom(number)
-    logging.info(f"Salt generado: {key.hex()}, Longitud de clave: {number * 8} bits")
+    key = os.urandom(size)
+    logging.info(f"Clave AES generada: {key.hex()}, Longitud de clave: {size * 8} bits")
     return key
 
 
@@ -376,10 +375,6 @@ def decode_survey_id(token: str, secret: str) -> int | None:
         return s.loads(token)
     except Exception:
         return None
-
-def generate_survey_key():
-    """Genera clave AES-256 para crear una encuesta."""
-    return os.urandom(32)
 
 def encrypt_survey_text(text, survey_aes_key):
     """Cifra una respuesta de texto con la clave AES de la encuesta."""
