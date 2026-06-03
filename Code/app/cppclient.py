@@ -36,7 +36,7 @@ PORT = 8080
 
 # SEAL helpers (funciones globales)
 
-def _crear_contexto():
+def _create_context():
     """Parámetros idénticos a los del servidor (servidor_seal.cpp)."""
     parms = seal.EncryptionParameters(seal.SCHEME_TYPE.CKKS)
     parms.set_poly_modulus_degree(8192)
@@ -44,16 +44,16 @@ def _crear_contexto():
     return seal.SEALContext(parms, True, seal.SEC_LEVEL_TYPE.TC128)
 
 
-def _cifrar_lista(encryptor, encoder, datos, scale):
+def _encrypt_list(encryptor, encoder, data, scale):
     """Cifra una lista de floats."""
     pt = seal.Plaintext()
-    encoder.encode(datos, scale, pt)
+    encoder.encode(data, scale, pt)
     ct = seal.Ciphertext()
     encryptor.encrypt(pt, ct)
     return ct
 
 
-def _serializar_ct(ct):
+def _serialize_ct(ct):
     """Serializa un ciphertext a bytes usando el formato nativo de SEAL."""
     fd, path = tempfile.mkstemp(suffix=".ct")
     os.close(fd)
@@ -68,23 +68,23 @@ def _serializar_ct(ct):
 
 # Socket helpers (funciones globales)
 
-def _enviar_bloque(sock, data: bytes):
+def _send_block(sock, bytes):
     """Envía uint64_t(tamaño) + datos (little-endian)."""
-    sock.sendall(struct.pack('<Q', len(data)))
-    sock.sendall(data)
+    sock.sendall(struct.pack('<Q', len(bytes)))
+    sock.sendall(bytes)
 
 
-def _recibir_bloque(sock) -> bytes:
+def _recieve_block(sock) -> bytes:
     """Recibe uint64_t(tamaño) + datos."""
-    size = struct.unpack('<Q', _recv_exacto(sock, 8))[0]
-    return _recv_exacto(sock, size)
+    size = struct.unpack('<Q', _exact_recv(sock, 8))[0]
+    return _exact_recv(sock, size)
 
 
-def _recv_exacto(sock, n: int) -> bytes:
+def _exact_recv(sock, number) -> bytes:
     """Recibe exactamente n bytes."""
     buf = bytearray()
-    while len(buf) < n:
-        chunk = sock.recv(n - len(buf))
+    while len(buf) < number:
+        chunk = sock.recv(number - len(buf))
         if not chunk:
             raise ConnectionError("Conexión cerrada por el servidor")
         buf.extend(chunk)
@@ -111,7 +111,7 @@ class Cliente:
     def __init__(self):
         """Inicializa contexto SEAL y genera claves."""
         try:
-            self.context = _crear_contexto()
+            self.context = _create_context()
             keygen = seal.KeyGenerator(self.context)
             
             self.public_key = seal.PublicKey()
@@ -139,7 +139,7 @@ class Cliente:
         Returns:
             str base64 - resultado encriptado, listo para guardar en BD
         """
-        return self._ejecutar_operacion("suma", lista2_plain, lista1_encrypted_base64)
+        return self._execute_operation("suma", lista2_plain, lista1_encrypted_base64)
     
     def compute_average(self, lista2_plain, lista1_encrypted_base64=None):
         """
@@ -152,9 +152,9 @@ class Cliente:
         Returns:
             str base64 - resultado encriptado, listo para guardar en BD
         """
-        return self._ejecutar_operacion("media", lista2_plain, lista1_encrypted_base64)
+        return self._execute_operation("media", lista2_plain, lista1_encrypted_base64)
     
-    def _ejecutar_operacion(self, operacion, lista2_plain, lista1_encrypted_base64):
+    def _execute_operation(self, operacion, lista2_plain, lista1_encrypted_base64):
         """
         Ejecuta operación homomórfica.
         
@@ -170,8 +170,8 @@ class Cliente:
             if lista1_encrypted_base64 is None:
                 # Primera vez: encriptar ceros
                 lista1_ceros = [0.0] * len(lista2_plain)
-                ct1 = _cifrar_lista(self.encryptor, self.encoder, lista1_ceros, self.scale)
-                bytes1 = _serializar_ct(ct1)
+                ct1 = _encrypt_list(self.encryptor, self.encoder, lista1_ceros, self.scale)
+                bytes1 = _serialize_ct(ct1)
             else:
                 # Deserializar desde base64
                 try:
@@ -181,8 +181,8 @@ class Cliente:
                     return None
             
             # Paso 2: Encriptar lista2 (nuevos datos)
-            ct2 = _cifrar_lista(self.encryptor, self.encoder, lista2_plain, self.scale)
-            bytes2 = _serializar_ct(ct2)
+            ct2 = _encrypt_list(self.encryptor, self.encoder, lista2_plain, self.scale)
+            bytes2 = _serialize_ct(ct2)
             
             logging.debug(f"Lista1 cifrada: {len(bytes1):,} bytes")
             logging.debug(f"Lista2 cifrada: {len(bytes2):,} bytes")
@@ -192,10 +192,10 @@ class Cliente:
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                     s.connect((HOST, PORT))
-                    _enviar_bloque(s, operacion.encode("utf-8"))  # comando
-                    _enviar_bloque(s, bytes1)                     # ct1 (lista1)
-                    _enviar_bloque(s, bytes2)                     # ct2 (lista2)
-                    resultado_bytes = _recibir_bloque(s)          # resultado
+                    _send_block(s, operacion.encode("utf-8"))  # comando
+                    _send_block(s, bytes1)                     # ct1 (lista1)
+                    _send_block(s, bytes2)                     # ct2 (lista2)
+                    resultado_bytes = _recieve_block(s)          # resultado
                     
                 logging.debug(f"Resultado recibido del servidor: {len(resultado_bytes):,} bytes")
             except socket.error as e:
@@ -209,7 +209,7 @@ class Cliente:
             return resultado_base64
             
         except Exception as e:
-            logging.error(f"Error en _ejecutar_operacion: {e}")
+            logging.error(f"Error en _execute_operation: {e}")
             return None
 
 
