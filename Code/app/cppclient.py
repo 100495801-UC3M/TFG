@@ -128,85 +128,85 @@ class Cliente:
             logging.error(f"Error al inicializar Cliente SEAL: {e}")
             raise
     
-    def compute_sum(self, lista2_plain, lista1_encrypted_base64=None):
+    def compute_sum(self, list2_plain, list1_encrypted_base64=None):
         """
         Calcula suma homomórfica: resultado = lista1_encriptada + lista2_encriptada.
         
         Args:
-            lista2_plain: list[float] - nuevos datos sin cifrar
-            lista1_encrypted_base64: str base64 - estadísticas encriptadas de BD (puede ser None)
+            list2_plain: list[float] - nuevos datos sin cifrar
+            list1_encrypted_base64: str base64 - estadísticas encriptadas de BD (puede ser None)
         
         Returns:
             str base64 - resultado encriptado, listo para guardar en BD
         """
-        return self._execute_operation("suma", lista2_plain, lista1_encrypted_base64)
+        return self._execute_operation("suma", list2_plain, list1_encrypted_base64)
     
-    def compute_average(self, lista2_plain, lista1_encrypted_base64=None):
+    def compute_average(self, list2_plain, list1_encrypted_base64=None):
         """
         Calcula media homomórfica: resultado = (lista1_encriptada + lista2_encriptada) / 2.
         
         Args:
-            lista2_plain: list[float] - nuevos datos sin cifrar
-            lista1_encrypted_base64: str base64 - estadísticas encriptadas de BD (puede ser None)
+            list2_plain: list[float] - nuevos datos sin cifrar
+            list1_encrypted_base64: str base64 - estadísticas encriptadas de BD (puede ser None)
         
         Returns:
             str base64 - resultado encriptado, listo para guardar en BD
         """
-        return self._execute_operation("media", lista2_plain, lista1_encrypted_base64)
+        return self._execute_operation("media", list2_plain, list1_encrypted_base64)
     
-    def _execute_operation(self, operacion, lista2_plain, lista1_encrypted_base64):
+    def _execute_operation(self, operation, list2_plain, list1_encrypted_base64):
         """
         Ejecuta operación homomórfica.
         
-        1. Si lista1_encrypted_base64 es None, crea lista1 de ceros y la encripta
-        2. Si lista1_encrypted_base64 no es None, la deserializa (ya encriptada)
-        3. Encripta lista2_plain
+        1. Si list1_encrypted_base64 es None, crea list1 de ceros y la encripta
+        2. Si list1_encrypted_base64 no es None, la deserializa (ya encriptada)
+        3. Encripta list2_plain
         4. Envía ambas al servidor
         5. Recibe resultado encriptado
         6. Retorna en base64
         """
         try:
             # Paso 1: Preparar lista1 (encriptada)
-            if lista1_encrypted_base64 is None:
+            if list1_encrypted_base64 is None:
                 # Primera vez: encriptar ceros
-                lista1_ceros = [0.0] * len(lista2_plain)
-                ct1 = _encrypt_list(self.encryptor, self.encoder, lista1_ceros, self.scale)
+                list1_cero = [0.0] * len(list2_plain)
+                ct1 = _encrypt_list(self.encryptor, self.encoder, list1_cero, self.scale)
                 bytes1 = _serialize_ct(ct1)
             else:
                 # Deserializar desde base64
                 try:
-                    bytes1 = base64.b64decode(lista1_encrypted_base64)
+                    bytes1 = base64.b64decode(list1_encrypted_base64)
                 except Exception as e:
                     logging.error(f"Error al decodificar lista1 base64: {e}")
                     return None
             
             # Paso 2: Encriptar lista2 (nuevos datos)
-            ct2 = _encrypt_list(self.encryptor, self.encoder, lista2_plain, self.scale)
+            ct2 = _encrypt_list(self.encryptor, self.encoder, list2_plain, self.scale)
             bytes2 = _serialize_ct(ct2)
             
             logging.debug(f"Lista1 cifrada: {len(bytes1):,} bytes")
             logging.debug(f"Lista2 cifrada: {len(bytes2):,} bytes")
             
             # Paso 3: Conectar al servidor y enviar
-            resultado_bytes = None
+            result_bytes = None
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                     s.connect((HOST, PORT))
-                    _send_block(s, operacion.encode("utf-8"))  # comando
+                    _send_block(s, operation.encode("utf-8"))  # comando
                     _send_block(s, bytes1)                     # ct1 (lista1)
                     _send_block(s, bytes2)                     # ct2 (lista2)
-                    resultado_bytes = _recieve_block(s)          # resultado
+                    result_bytes = _recieve_block(s)          # resultado
                     
-                logging.debug(f"Resultado recibido del servidor: {len(resultado_bytes):,} bytes")
+                logging.debug(f"Resultado recibido del servidor: {len(result_bytes):,} bytes")
             except socket.error as e:
                 logging.error(f"Error de conexión con servidor SEAL: {e}")
                 return None
             
             # Paso 4: Convertir a base64 y retornar
-            resultado_base64 = base64.b64encode(resultado_bytes).decode('utf-8')
-            logging.info(f"Operación '{operacion}' completada exitosamente")
+            result_base64 = base64.b64encode(result_bytes).decode('utf-8')
+            logging.info(f"Operación '{operation}' completada exitosamente")
             
-            return resultado_base64
+            return result_base64
             
         except Exception as e:
             logging.error(f"Error en _execute_operation: {e}")
