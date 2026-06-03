@@ -115,7 +115,7 @@ def register():
         if users_db.check_user(dni_index, "DNI") or users_db.check_user(email_index, "email") or users_db.check_user(name, "name"):
             return render_template("register.html", error="Usuario, email o DNI ya registrado.")
 
-        salt                    = security.generate_salt_aes(16)
+        salt                    = security.generate_aes_key(16)
         dni_encrypted           = security.encrypt_field(DNI, SECRET_KEY)
         email_encrypted         = security.encrypt_field(email, SECRET_KEY)
         hashed_password         = security.hash(password, salt)
@@ -663,7 +663,7 @@ def create_survey():
                     pass
             
             # Generar clave AES para esta encuesta y cifrarla con SECRET_KEY del servidor, para las preguntas con texto
-            raw_survey_key = security.generate_salt_aes(32)
+            raw_survey_key = security.generate_aes_key(32)
             encrypted_survey_key = security.encrypt_field(
                 base64.b64encode(raw_survey_key).decode(), SECRET_KEY)
 

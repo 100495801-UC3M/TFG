@@ -51,7 +51,7 @@ def check_password(password):
         return False
 
 
-def generate_salt_aes(size):
+def generate_aes_key(size):
     # Generar salt o una clave aes
     key = os.urandom(size)
     logging.info(f"Clave AES generada: {key.hex()}, Longitud de clave: {size * 8} bits")
