@@ -144,16 +144,31 @@ int main()
 
             // 3. Operación homomórfica
             Ciphertext resultado;
-            evaluator.add(ct1, ct2, resultado);
 
-            if (cmd == "media") {
-                Plaintext plain_half;
-                encoder.encode(0.5, scale, plain_half);
-                evaluator.multiply_plain_inplace(resultado, plain_half);
-                evaluator.rescale_to_next_inplace(resultado);
-                cout << "[servidor_seal] Aplicado: (ct1 + ct2) * 0.5" << endl;
-            } else {
+            if (cmd == "suma"){
+                evaluator.add(ct1, ct2, resultado);
                 cout << "[servidor_seal] Aplicado: ct1 + ct2" << endl;
+            }
+
+            else if (cmd == "media"){
+                // Leer escalar 1/votes enviado por el cliente
+                auto scalar_bytes = recv_block(client_fd);
+                double scalar = *reinterpret_cast<const double*>(scalar_bytes.data());
+                
+                // Suma homomórfica
+                evaluator.add(ct1, ct2, resultado);
+                
+                // Multiplicar por el escalar (1/votes) y reescalar
+                Plaintext plain_scalar;
+                encoder.encode(scalar, scale, plain_scalar);
+                evaluator.multiply_plain_inplace(resultado, plain_scalar);
+                evaluator.rescale_to_next_inplace(resultado);
+                
+                cout << "[servidor_seal] Aplicado: (ct1 + ct2) * " << scalar << endl;
+            }
+
+            else {
+                cout << "Comando criptográfico no soportado" << endl;
             }
 
             // 4. Enviar resultado cifrado

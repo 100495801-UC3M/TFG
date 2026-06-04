@@ -141,20 +141,21 @@ class Cliente:
         """
         return self._execute_operation("suma", list2_plain, list1_encrypted_base64)
     
-    def compute_average(self, list2_plain, list1_encrypted_base64=None):
+    def compute_average(self, votes, list2_plain, list1_encrypted_base64=None, ):
         """
-        Calcula media homomórfica: resultado = (lista1_encriptada + lista2_encriptada) / 2.
+        Calcula media homomórfica: resultado = (lista1_encriptada + lista2_encriptada) / votes.
         
         Args:
+            votes: int - número total de votos (incluyendo el actual)
             list2_plain: list[float] - nuevos datos sin cifrar
             list1_encrypted_base64: str base64 - estadísticas encriptadas de BD (puede ser None)
         
         Returns:
             str base64 - resultado encriptado, listo para guardar en BD
         """
-        return self._execute_operation("media", list2_plain, list1_encrypted_base64)
+        return self._execute_operation("media", list2_plain, list1_encrypted_base64, votes)
     
-    def _execute_operation(self, operation, list2_plain, list1_encrypted_base64):
+    def _execute_operation(self, operation, list2_plain, list1_encrypted_base64, votes=None):
         """
         Ejecuta operación homomórfica.
         
@@ -195,6 +196,13 @@ class Cliente:
                     _send_block(s, operation.encode("utf-8"))  # comando
                     _send_block(s, bytes1)                     # ct1 (lista1)
                     _send_block(s, bytes2)                     # ct2 (lista2)
+                    if operation == "media":
+                        if not votes or votes == 0:
+                            logging.error("votes es 0 o None, no se puede calcular la media")
+                            return None
+                        scalar = 1.0 / votes
+                        scalar_bytes = struct.pack('<d', scalar)  # double little-endian
+                        _send_block(s, scalar_bytes)
                     result_bytes = _recieve_block(s)          # resultado
                     
                 logging.debug(f"Resultado recibido del servidor: {len(result_bytes):,} bytes")

@@ -93,7 +93,7 @@ def build_numeric_stats_list(survey_id, questions_db, survey_db):
 
 
 def send_surveys_to_server(survey_id, demographic_group, answers_plain,
-                           statistics_db, cliente_seal):
+                           statistics_db, cliente_seal, votes):
     """
     Envía respuestas numéricas al servidor SEAL para calcular estadísticas cifradas.
     """
@@ -107,7 +107,7 @@ def send_surveys_to_server(survey_id, demographic_group, answers_plain,
             lista1_encrypted_base64 = existing['value']
 
         result_sum_b64 = cliente_seal.compute_sum(answers_plain, lista1_encrypted_base64)
-        result_avg_b64 = cliente_seal.compute_average(answers_plain, lista1_encrypted_base64)
+        result_avg_b64 = cliente_seal.compute_average(votes, answers_plain, lista1_encrypted_base64)
 
         if result_sum_b64 is None or result_avg_b64 is None:
             logging.warning(f"SEAL retornó None para survey {survey_id}, "
@@ -134,7 +134,7 @@ def send_surveys_to_server(survey_id, demographic_group, answers_plain,
 
 
 def trigger_seal_for_survey(survey_id, questions_db, survey_db,
-                             statistics_db, cliente_seal):
+                             statistics_db, cliente_seal, votes):
     """
     Itera las preguntas numéricas de la encuesta y calcula estadísticas cifradas.
     Se invoca tras cada nueva votación.
@@ -146,11 +146,15 @@ def trigger_seal_for_survey(survey_id, questions_db, survey_db,
         if not stats_list or sum(stats_list) == 0:
             logging.debug(f"Sin datos numéricos para encuesta {survey_id}")
             return True
-
+        
+        if not votes or votes == 0:
+            logging.error(f"votes es 0 para encuesta {survey_id}, no se puede calcular media")
+            return False
+        
         demographic_group = "numeric_stats"
         return send_surveys_to_server(
             survey_id, demographic_group, stats_list,
-            statistics_db, cliente_seal)
+            statistics_db, cliente_seal, votes)
 
     except Exception as e:
         logging.error(f"Error en trigger_seal_for_survey: {e}")

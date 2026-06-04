@@ -1235,8 +1235,9 @@ def vote_survey(survey_token):
                                     answers_db.add_answer(sub_id, q["id"], None, val)
                             else:
                                 answers_db.add_answer(sub_id, q["id"], None, val)
-
-                seal_ok = trigger_seal_for_survey(survey_id, questions_db, survey_db, statistics_db, cliente_seal)
+                            
+                total_votes = survey_db.get_vote_count(survey_id)
+                seal_ok = trigger_seal_for_survey(survey_id, questions_db, survey_db, statistics_db, cliente_seal, total_votes)
                 if not seal_ok:
                     logging.warning(f"Fallo en SEAL para encuesta {survey_id}. "
                                     "Las estadísticas cifradas no se actualizaron.")
