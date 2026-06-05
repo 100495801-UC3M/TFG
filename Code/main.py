@@ -117,7 +117,9 @@ def register():
 
         salt                    = security.generate_aes_key(16)
         dni_encrypted           = security.encrypt_field(DNI, SECRET_KEY)
+        logging.info(f"DNI AES-GCM creado: {dni_encrypted}")
         email_encrypted         = security.encrypt_field(email, SECRET_KEY)
+        logging.info(f"Email AES-GCM creado: {email_encrypted}")
         hashed_password         = security.hash(password, salt)
         private_key, public_key = security.generate_keys()
         private_key_encrypted   = security.encrypt_private_key(private_key, password, salt)
@@ -203,8 +205,8 @@ def login():
                             session_id = str(uuid.uuid4())
                             session["session_id"] = session_id
                             session_private_key_db.save_session_private_key(session_id, private_key)
-                            
-                            logging.info(f"Usuario {dni_or_username_or_email} ha iniciado sesión.")
+                            logging.info(f"Usuario {dni_or_username_or_email} ha iniciado sesión."
+                                         f"Su clave privada serializada se ha guardado en la base de datos.")
                             return redirect(url_for("home"))
                         else:
                             # Si el certificado no es válido, se revoca y se crea un nuevo request con los mismos datos
@@ -468,19 +470,33 @@ def oauth2callback():
 
     redirect_uri = config["redirect_uris"][0]
 
-    response = requests.post("https://oauth2.googleapis.com/token", data={
-        "code": code,
-        "client_id": config["client_id"],
-        "client_secret": config["client_secret"],
-        "redirect_uri": redirect_uri,
-        "grant_type": "authorization_code"
-    })
+    try: 
+        response = requests.post("https://oauth2.googleapis.com/token", data={
+            "code": code,
+            "client_id": config["client_id"],
+            "client_secret": config["client_secret"],
+            "redirect_uri": redirect_uri,
+            "grant_type": "authorization_code"
+        }, timeout=10)
 
-    if response.status_code != 200:
-        logging.error(f"Error al obtener token: {response.text}")
-        return f"Error al obtener token: {response.text}", 400
+        response.raise_for_status()
 
-    token_data = response.json()
+        token_data = response.json()
+
+    except requests.exceptions.HTTPError as http_err:
+        # Error 400, Bad request
+        error_msg = f"Fallo en la negociación OAuth2 con Google: {http_err}"
+        if 'response' in locals() and response.text:
+            error_msg += f" - Detalles: {response.text}"
+            
+        logging.error(error_msg)
+        return "Error al comunicarse con el proveedor de identidad externo. El código puede haber expirado.", 502
+    
+    except requests.exceptions.RequestException as req_err:
+        # Captura otros problemas físicos como caídas de internet, DNS o timeouts
+        logging.error(f"Error de red crítico durante el intercambio de tokens: {req_err}")
+        return "Servicio de autenticación temporalmente no disponible debido a un fallo de red.", 503
+
     token_data["expires_at"] = time.time() + token_data.get("expires_in", 3600)
 
     # Guardar token de forma encriptada
@@ -666,6 +682,7 @@ def create_survey():
             raw_survey_key = security.generate_aes_key(32)
             encrypted_survey_key = security.encrypt_field(
                 base64.b64encode(raw_survey_key).decode(), SECRET_KEY)
+            logging.info(f"Clave AES-GCM para la encuesta creada: {encrypted_survey_key}")
 
             new_survey_id = survey_db.add_survey(
                 username, title, description, start_at, end_at,

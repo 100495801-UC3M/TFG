@@ -259,49 +259,53 @@ def send_email_gmail_api(from_email: str, to_email: str, subject: str, body: str
     # 3. Construir payload
     payload = {"raw": message_base64}
 
-    # 4. Obtener token_data desde config manager (desencriptado)
-    config_manager = get_config_manager()
-    token_data = config_manager.get_token_store()
-    
-    # Verificar expiración y refrescar si procede
-    expires_at = token_data.get("expires_at")
-    if expires_at and time.time() >= expires_at:
-        new_token = refresh_access_token()
-        token_data.update(new_token)
-        # Guardar el token actualizado (encriptado)
-        config_manager.save_token_store(token_data)
-    
-    access_token = token_data.get("access_token")
-
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json"
-    }
-
-    # 5. Enviar request y reintentar una vez si recibimos 401 (token expirado)
-    response = requests.post(
-        "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
-        headers=headers,
-        json=payload
-    )
-
-    if response.status_code == 401:
-        # Refrescar si da error
-        new_token = refresh_access_token()
-        token_data.update(new_token)
-        # Guardar el token actualizado (encriptado)
-        config_manager.save_token_store(token_data)
+    try: 
+        # 4. Obtener token_data desde config manager (desencriptado)
+        config_manager = get_config_manager()
+        token_data = config_manager.get_token_store()
+        
+        # Verificar expiración y refrescar si procede
+        expires_at = token_data.get("expires_at")
+        if expires_at and time.time() >= expires_at:
+            new_token = refresh_access_token()
+            token_data.update(new_token)
+            # Guardar el token actualizado (encriptado)
+            config_manager.save_token_store(token_data)
+        
         access_token = token_data.get("access_token")
 
-        headers["Authorization"] = f"Bearer {access_token}"
-        # Reintentar
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json"
+        }
+
+        # 5. Enviar request y reintentar una vez si recibimos 401 (token expirado)
         response = requests.post(
             "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
             headers=headers,
             json=payload
         )
 
-    return response.status_code, response.text
+        if response.status_code == 401:
+            # Refrescar si da error
+            new_token = refresh_access_token()
+            token_data.update(new_token)
+            # Guardar el token actualizado (encriptado)
+            config_manager.save_token_store(token_data)
+            access_token = token_data.get("access_token")
+
+            headers["Authorization"] = f"Bearer {access_token}"
+            # Reintentar
+            response = requests.post(
+                "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+                headers=headers,
+                json=payload
+            )
+
+        return response.status_code, response.text
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Error al enviar email: {e}")
+        return 503, str(e)
 
 def refresh_access_token():
     """Refresca el token de acceso OAuth2."""
@@ -361,7 +365,7 @@ def decrypt_field(encrypted, server_key) -> str:
 def generate_user_hash(survey_id, username, SECRET_KEY):
     value_to_hash = f"{survey_id}:{username}".encode()
     user_hash = hmac_module.new(SECRET_KEY, value_to_hash, hashlib.sha256).hexdigest()
-    logging.info(f"User hash generado para survey_id={survey_id}, username={username}")
+    logging.info(f"User hash generado para survey_id={survey_id}, username={username}: {user_hash}")
     return user_hash
 
 def encode_survey_id(survey_id: int, secret: str) -> str:

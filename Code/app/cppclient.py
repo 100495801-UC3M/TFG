@@ -123,7 +123,7 @@ class Cliente:
             self.encoder = seal.CKKSEncoder(self.context)
             self.scale = 2 ** 40
             
-            logging.info("Cliente SEAL inicializado correctamente")
+            logging.info("Cliente SEAL inicializado correctamente con protocolo TLS")
         except Exception as e:
             logging.error(f"Error al inicializar Cliente SEAL: {e}")
             raise
