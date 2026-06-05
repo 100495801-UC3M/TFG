@@ -170,10 +170,14 @@ def create_request(username, public_key, private_key):
 def open_certificate(cert_path):
     # Función para abrir un certificado y leer sus datos
     cert_path = cert_path.strip()
-    with open(cert_path, "rb") as f:
-        cert_data = f.read()
-    logging.info("Certificado %s abierto y leido", cert_path)
-    return x509.load_pem_x509_certificate(cert_data, default_backend())
+    try:
+        with open(cert_path, "rb") as f:
+            cert_data = f.read()
+        logging.info("Certificado %s abierto y leido", cert_path)
+        return x509.load_pem_x509_certificate(cert_data, default_backend())
+    except:
+        logging.info("Certificado %s no ha podido ser abierto.", cert_path)
+        return False
 
 
 
@@ -183,11 +187,14 @@ def verify_certificate(cert_path):
     cert_path = "AC/nuevoscerts/" + cert_path + ".pem"
     user_cert = open_certificate(cert_path)
 
-    if verify_signature(user_cert) and verify_validity(user_cert):
-        logging.info(f"Certificado válido y verificado correctamente: {cert_path}. Algoritmo de firma: {user_cert.signature_hash_algorithm.name}")
-        return True
-    logging.warning("Certificado no válido ya sea por firma incorrecta o por caducidad: %s", cert_path)
-    return False
+    if user_cert != False:
+        if verify_signature(user_cert) and verify_validity(user_cert):
+            logging.info(f"Certificado válido y verificado correctamente: {cert_path}. Algoritmo de firma: {user_cert.signature_hash_algorithm.name}")
+            return True
+        logging.warning("Certificado no válido ya sea por firma incorrecta o por caducidad: %s", cert_path)
+        return False
+    else:
+        return False
 
 
 def verify_signature(cert):
@@ -223,9 +230,11 @@ def get_public_key_from_certificate(cert_path):
     cert_path = cert_path.strip()
     cert_path = "./AC/nuevoscerts/" + cert_path + ".pem"
     cert = open_certificate(cert_path)
-
-    logging.info("Clave pública obtenida del certificado: Longitud %d bits", cert.public_key().key_size)
-    return cert.public_key()
+    if cert != False:
+        logging.info("Clave pública obtenida del certificado: Longitud %d bits", cert.public_key().key_size)
+        return cert.public_key()
+    else:
+        return False
 
 
 def send_email_gmail_api(from_email: str, to_email: str, subject: str, body: str):

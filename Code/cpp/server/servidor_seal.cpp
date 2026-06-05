@@ -69,17 +69,20 @@ string recv_string(int sock)
     return s;
 }
 
-Ciphertext recv_cipher(int sock, const SEALContext &context)
+vector<char> recv_block(int sock)
 {
     uint64_t size;
     recv_todo(sock, &size, sizeof(size));
-
     vector<char> buf(size);
     recv_todo(sock, buf.data(), size);
+    return buf;
+}
 
+Ciphertext recv_cipher(int sock, const SEALContext &context)
+{
+    vector<char> buf = recv_block(sock);
     stringstream ss;
-    ss.write(buf.data(), size);
-
+    ss.write(buf.data(), buf.size());
     Ciphertext ct;
     ct.load(context, ss);
     return ct;
@@ -152,7 +155,7 @@ int main()
 
             else if (cmd == "media"){
                 // Leer escalar 1/votes enviado por el cliente
-                auto scalar_bytes = recv_block(client_fd);
+                auto scalar_bytes = recv_block(client);
                 double scalar = *reinterpret_cast<const double*>(scalar_bytes.data());
                 
                 // Suma homomórfica

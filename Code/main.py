@@ -211,8 +211,9 @@ def login():
                         else:
                             # Si el certificado no es válido, se revoca y se crea un nuevo request con los mismos datos
                             public_key = security.get_public_key_from_certificate(route)
-                            private_key = security.decrypt_private_key(user["private_key"], password, salt)
-                            security.create_request(user["name"], public_key , private_key)
+                            if public_key != False:
+                                private_key = security.decrypt_private_key(user["private_key"], password, salt)
+                                security.create_request(user["name"], public_key , private_key)
 
                             logging.error(f"Certificado alterado o caducado para {dni_or_username_or_email}.")
                             error = "Ha habido un error con su certificado, debe esperar a que sea aprobado en el sistema nuevamente"
