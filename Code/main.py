@@ -409,7 +409,7 @@ def profile():
 
             hashed_password = security.hash(new_password, salt)
             users_db.update_password(username, hashed_password, private_key)
-            success = "Las contraseña ha sido actualizada correctamente"
+            success = "La contraseña ha sido actualizada correctamente"
 
             return render_template("profile.html", username=username, success=success)
 
@@ -430,7 +430,8 @@ def logout():
         abort(404)
     else:
         session.clear()
-        return redirect(url_for("index"))
+        logging.info(f"Se ha cerrado la sesión actual")
+        return redirect(url_for("login"))
 
 
 @app.route("/authorize")
