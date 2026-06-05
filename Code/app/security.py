@@ -13,7 +13,7 @@ import hashlib
 from itsdangerous import URLSafeSerializer  # viene con Flask, para las URL
 from app.users import Users
 from app.config_manager import get_config_manager
-from datetime import datetime
+from datetime import datetime, timezone
 from cryptography import x509
 from cryptography.exceptions import InvalidSignature
 from cryptography.x509.oid import NameOID
@@ -217,8 +217,8 @@ def verify_signature(cert):
 
 def verify_validity(cert):
     # Comprobar si el certificado está dentro de su periodo de validez
-    current_time = datetime.now()
-    if cert.not_valid_before <= current_time <= cert.not_valid_after:
+    current_time = datetime.now(timezone.utc)
+    if cert.not_valid_before_utc <= current_time <= cert.not_valid_after_utc:
         logging.info("Certificado dentro del periodo de validez.")
         return True
     logging.warning("Certificado fuera del periodo de validez.")

@@ -1403,6 +1403,10 @@ def survey_stats(survey_token):
     )
 
 if __name__ == "__main__":
+    logging.info(
+    f"Servidor Flask iniciado con TLS | Certificado: config/cert.pem | "
+    f"Clave: config/key.pem | Host: localhost | Puerto: 5000")
+
     # Para muestra en la defensa se ha creado un certificado autofirmado para que la web aparezca como insegura
     # El use_reloader=False es para que no te pida dos veces la contraseña maestra, ya que en True
     # al hacer debug, hace un proceso hijo.
