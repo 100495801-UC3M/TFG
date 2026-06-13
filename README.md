@@ -158,4 +158,5 @@ python .\main.py
 ## Script para aceptar los certificados:
 
 cd AC
+
 bash aprobar_solicitudes.sh
