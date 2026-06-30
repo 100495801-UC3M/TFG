@@ -7,3 +7,6 @@ R	270605124026Z	260605190906Z	05	unknown	/CN=prueba1
 V	270605152914Z		06	unknown	/CN=prueba2
 V	270605175915Z		07	unknown	/CN=prueba3
 V	270605190906Z		08	unknown	/CN=prueba1
+R	270626102535Z	260626132729Z	09	unknown	/CN=mario
+V	270626102901Z		0A	unknown	/CN=juan
+V	270626132729Z		0B	unknown	/CN=mario
